@@ -258,6 +258,7 @@ extension MealSettings {
                                     "You can personalize the conversion calculation by adjusting the following settings that will appear when this option is enabled:"
                                 )
                                 Text("• Fat and Protein Delay")
+                                Text("• Maximum Duration")
                                 Text("• Spread Interval")
                                 Text("• Fat and Protein Percentage")
                             }
@@ -294,6 +295,35 @@ extension MealSettings {
                     )
 
                     SettingInputSection(
+                        decimalValue: $state.timeCap,
+                        booleanValue: $booleanPlaceholder,
+                        shouldDisplayHint: $shouldDisplayHint,
+                        selectedVerboseHint: Binding(
+                            get: { selectedVerboseHint },
+                            set: {
+                                selectedVerboseHint = $0.map { AnyView($0) }
+                                hintLabel = String(localized: "Maximum Duration")
+                            }
+                        ),
+                        units: state.units,
+                        type: .decimal("timeCap"),
+                        label: String(localized: "Maximum Duration"),
+                        miniHint: String(localized: "Set the maximum timeframe to extend FPUs."),
+                        verboseHint:
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Default: 8 hours").bold()
+                            Text(
+                                "This sets the maximum length of time that Fat and Protein Carb Equivalents (FPUs) will be extended over from a single Fat and/or Protein bolus calculator entry."
+                            )
+                            Text(
+                                "It is one factor used in combination with the Fat and Protein Delay, Spread Interval, and Fat and Protein Factor to create the FPU entries."
+                            )
+                            Text("Increasing this setting may result in more FPU entries with smaller carb values.")
+                            Text("Decreasing this setting may result in fewer FPU entries with larger carb values.")
+                        }
+                    )
+
+                    SettingInputSection(
                         decimalValue: $state.minuteInterval,
                         booleanValue: $booleanPlaceholder,
                         shouldDisplayHint: $shouldDisplayHint,
@@ -314,9 +344,9 @@ extension MealSettings {
                             Text(
                                 "This determines how many minutes will be between individual Fat-Protein Unit Carb Equivalent (FPU) entries from a single Fat and/or Protein bolus calculator entry."
                             )
-                            Text(
-                                "Entries are capped at 33 grams each, with up to three entries, for a max total of 99 grams."
-                            )
+                            Text("The shorter the interval, the smoother the correlating dosing result.")
+                            Text("Increasing this setting may result in fewer FPU entries with larger carb values.")
+                            Text("Decreasing this setting may result in more FPU entries with smaller carb values.")
                         }
                     )
 

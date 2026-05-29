@@ -42,6 +42,7 @@ struct TrioSettings: JSON, Equatable, Encodable {
     var showCarbsRequiredBadge: Bool = true
     var useFPUconversion: Bool = false
     var individualAdjustmentFactor: Decimal = 0.5
+    var timeCap: Decimal = 8
     var minuteInterval: Decimal = 30
     var delay: Decimal = 60
     var useAppleHealth: Bool = false
@@ -203,6 +204,10 @@ extension TrioSettings: Decodable {
 
         if let overrideFactor = try? container.decode(Decimal.self, forKey: .overrideFactor) {
             settings.overrideFactor = overrideFactor
+        }
+
+        if let timeCap = try? container.decode(Decimal.self, forKey: .timeCap) {
+            settings.timeCap = timeCap
         }
 
         if let minuteInterval = try? container.decode(Decimal.self, forKey: .minuteInterval) {
