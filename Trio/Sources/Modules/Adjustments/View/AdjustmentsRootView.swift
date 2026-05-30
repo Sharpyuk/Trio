@@ -490,12 +490,42 @@ struct ExerciseModeForm: View {
                             Text(type.rawValue).tag(type)
                         }
                     }
+                    .onChange(of: state.exerciseType) { _, _ in
+                        state.applyExercisePresetForSelectedType()
+                    }
 
                     if state.exerciseType == .custom {
                         TextField("Custom exercise type", text: $state.customExerciseTypeName)
+                            .onSubmit {
+                                state.applyExercisePresetForSelectedType()
+                            }
                     }
 
-                    DatePicker("Override Start Time", selection: $state.exerciseStartDate, in: Date.now...)
+                    Picker("Start", selection: $state.scheduleExerciseForFuture) {
+                        Text("Start Immediately").tag(false)
+                        Text("Schedule for Future").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+
+                    if state.scheduleExerciseForFuture {
+                        DatePicker("Exercise Start Time", selection: $state.exerciseStartDate, in: Date.now...)
+                    }
+                }
+                .listRowBackground(Color.chart)
+
+                Section(header: Text("Activity preset")) {
+                    Text(
+                        "Selecting an activity type loads its saved defaults. Starting or scheduling exercise remembers the current settings for that type."
+                    )
+                    .foregroundStyle(.secondary)
+                    Button("Save Current Settings as Preset") {
+                        state.saveCurrentExercisePreset()
+                    }
+                    Button("Reset Built-in Presets") {
+                        ExerciseActivityPresetStore.resetToDefaults()
+                        state.exerciseActivityPresets = ExerciseActivityPresetStore.loadPresets()
+                        state.applyExercisePresetForSelectedType()
+                    }
                 }
                 .listRowBackground(Color.chart)
 
@@ -603,14 +633,22 @@ struct ExerciseModeForm: View {
                 Section {
                     Button(action: {
                         Task {
-                            await state.saveExerciseMode()
-                            dismiss()
+                            let saved = await state.saveExerciseMode()
+                            if saved {
+                                dismiss()
+                            }
                         }
                     }, label: {
-                        Text(isScheduled ? "Schedule Exercise Override" : "Start Exercise Override")
+                        Text(state.scheduleExerciseForFuture ? "Schedule Exercise Override" : "Start Exercise Override")
                     })
                         .frame(maxWidth: .infinity, alignment: .center)
                         .tint(.white)
+
+                    if let error = state.exerciseModeStartError {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
                 }
                 .listRowBackground(Color(.systemBlue))
             }
@@ -630,7 +668,10 @@ struct ExerciseModeForm: View {
             }
             .onAppear {
                 targetStep = state.units == .mgdL ? 5 : 9
-                state.exerciseStartDate = Date()
+                if !state.scheduleExerciseForFuture {
+                    state.exerciseStartDate = Date()
+                }
+                state.applyExercisePresetForSelectedType()
             }
         }
     }
@@ -765,6 +806,15 @@ struct ExercisePhaseStatusView: View {
         override.exercisePhase ?? .duringExercise
     }
 
+    private var sessionState: ExerciseSessionState {
+        guard let sessionID = override.id,
+              let metadata = ExerciseSessionMetadataStore.load(sessionID: sessionID)
+        else {
+            return override.isActive() ? .exerciseActive : .scheduledPreExercise
+        }
+        return metadata.state()
+    }
+
     private var phaseColor: Color {
         switch phase {
         case .preExercise:
@@ -779,6 +829,11 @@ struct ExercisePhaseStatusView: View {
     }
 
     private var remainingText: String {
+        if sessionState == .scheduledPreExercise {
+            guard let start = override.date else { return "scheduled" }
+            return "starts in \(formattedTimeRemaining(start.timeIntervalSinceNow))"
+        }
+
         if phase == .duringExercise {
             let elapsed = abs((override.date ?? Date()).timeIntervalSinceNow)
             return formattedTimeRemaining(elapsed) + " elapsed"
@@ -831,7 +886,12 @@ struct ExercisePhaseStatusView: View {
             }
             .frame(height: 8)
 
-            if phase == .preExercise {
+            if sessionState == .scheduledPreExercise {
+                HStack {
+                    Spacer()
+                    cancelButton
+                }
+            } else if phase == .preExercise {
                 HStack {
                     Button {
                         startExerciseNow()

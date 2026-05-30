@@ -19,33 +19,34 @@ extension Adjustments.RootView {
     var scheduledExerciseModes: some View {
         Section {
             ForEach(state.scheduledExerciseOverrides) { exerciseOverride in
-                let startsIn = exerciseOverride.date?.timeIntervalSinceNow ?? 0
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(exerciseOverride.exerciseTypeName ?? OverrideStored.exerciseOverrideName)
-                        Text("Starts in \(formattedTimeRemaining(startsIn))")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        if let phase = exerciseOverride.exercisePhase {
-                            Text(phase.title)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                ExercisePhaseStatusView(
+                    override: exerciseOverride,
+                    formattedTimeRemaining: formattedTimeRemaining,
+                    startExerciseNow: {
+                        Task {
+                            await state.startExerciseNow(exerciseOverride.objectID)
                         }
-                    }
-                    Spacer()
-                    Button(role: .destructive) {
+                    },
+                    stopExercise: {
+                        Task {
+                            await state.stopExerciseNow(exerciseOverride.objectID)
+                        }
+                    },
+                    endRecovery: {
                         Task {
                             await state.cancelScheduledExerciseOverride(exerciseOverride.objectID)
                         }
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
+                    },
+                    cancelExercise: {
+                        Task {
+                            await state.cancelScheduledExerciseOverride(exerciseOverride.objectID)
+                        }
                     }
-                    .buttonStyle(.borderless)
-                }
+                )
             }
             .listRowBackground(Color.chart)
         } header: {
-            Text("Scheduled Exercise")
+            Text("Exercise Override")
         }
     }
 

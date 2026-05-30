@@ -28253,6 +28253,9 @@
         }
       }
     },
+    "Activity preset" : {
+
+    },
     "Add" : {
       "comment" : "Add profile basal",
       "localizations" : {
@@ -115910,6 +115913,9 @@
     "Exercise Session" : {
 
     },
+    "Exercise Start Time" : {
+
+    },
     "Experimental" : {
       "comment" : "New Experimental feature",
       "extractionState" : "manual",
@@ -192952,9 +192958,6 @@
         }
       }
     },
-    "Override Start Time" : {
-
-    },
     "Override Target" : {
       "localizations" : {
         "bg" : {
@@ -210109,6 +210112,9 @@
     "Reset App Attest state?" : {
 
     },
+    "Reset Built-in Presets" : {
+
+    },
     "Reset to Defaults" : {
       "localizations" : {
         "bg" : {
@@ -213779,6 +213785,9 @@
         }
       }
     },
+    "Save Current Settings as Preset" : {
+
+    },
     "Save on Pump" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -214798,6 +214807,9 @@
     "Schedule Exercise Override" : {
 
     },
+    "Schedule for Future" : {
+
+    },
     "Schedule when SMBs are Off" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -215052,9 +215064,6 @@
           }
         }
       }
-    },
-    "Scheduled Exercise" : {
-
     },
     "Scheduled Reminder" : {
       "extractionState" : "manual",
@@ -217808,6 +217817,9 @@
           }
         }
       }
+    },
+    "Selecting an activity type loads its saved defaults. Starting or scheduling exercise remembers the current settings for that type." : {
+
     },
     "Selection" : {
       "localizations" : {
@@ -231839,6 +231851,9 @@
 
     },
     "Start Exercise Override" : {
+
+    },
+    "Start Immediately" : {
 
     },
     "Start new Profile" : {

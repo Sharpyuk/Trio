@@ -153,6 +153,7 @@ extension Home {
 
         override func subscribe() {
             ExerciseGlucoseAnnouncementManager.shared.startMonitoring()
+            ExerciseGlucoseAnnouncementManager.shared.reconcileExerciseSessions(reason: "homeSubscribe")
             coreDataPublisher =
                 changedObjectsOnManagedObjectContextDidSavePublisher()
                     .receive(on: queue)
@@ -293,6 +294,15 @@ extension Home {
                 guard let self = self else { return }
                 self.setupOverrides()
             }.store(in: &subscriptions)
+
+            Foundation.NotificationCenter.default.publisher(for: .didUpdateOverrideConfiguration)
+                .receive(on: queue)
+                .sink { [weak self] _ in
+                    guard let self = self else { return }
+                    self.setupOverrides()
+                    self.setupOverrideRunStored()
+                }
+                .store(in: &subscriptions)
 
             coreDataPublisher?.filteredByEntityName("OverrideRunStored").sink { [weak self] _ in
                 guard let self = self else { return }

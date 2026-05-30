@@ -15,6 +15,109 @@ struct ExerciseAnnouncementSettings: Codable, Equatable {
     var announcementsMade: Int = 0
 }
 
+struct ExerciseActivityPreset: Codable, Identifiable, Equatable {
+    var id: String
+    var activityTypeName: String
+    var icon: String
+    var preExerciseEnabled: Bool
+    var preExerciseDuration: Decimal
+    var preExerciseTarget: Decimal
+    var preExerciseBasalPercent: Double
+    var preExerciseSMBSuppressed: Bool
+    var exerciseTarget: Decimal
+    var exerciseBasalPercent: Double
+    var exerciseSMBSuppressed: Bool
+    var announceGlucoseEnabled: Bool
+    var announcementInterval: Decimal
+    var includeTrend: Bool
+    var urgentAnnouncementsEnabled: Bool
+    var recoveryEnabled: Bool
+    var minimumDurationForRecovery: Decimal
+    var defaultRecoveryDecayType: ExerciseSensitivityDecayType
+
+    static func builtIn(
+        _ name: String,
+        icon: String,
+        preBasal: Double,
+        exerciseBasal: Double,
+        announce: Bool = false
+    ) -> ExerciseActivityPreset {
+        ExerciseActivityPreset(
+            id: name,
+            activityTypeName: name,
+            icon: icon,
+            preExerciseEnabled: true,
+            preExerciseDuration: 60,
+            preExerciseTarget: 108,
+            preExerciseBasalPercent: preBasal,
+            preExerciseSMBSuppressed: true,
+            exerciseTarget: 108,
+            exerciseBasalPercent: exerciseBasal,
+            exerciseSMBSuppressed: true,
+            announceGlucoseEnabled: announce,
+            announcementInterval: 5,
+            includeTrend: true,
+            urgentAnnouncementsEnabled: true,
+            recoveryEnabled: true,
+            minimumDurationForRecovery: 10,
+            defaultRecoveryDecayType: .linear
+        )
+    }
+}
+
+enum ExerciseActivityPresetStore {
+    private static let storageKey = "ExerciseActivityPresets.v1"
+
+    static let builtInPresets: [ExerciseActivityPreset] = [
+        .builtIn("Run", icon: "figure.run", preBasal: 0, exerciseBasal: 50),
+        .builtIn("Ultra Run", icon: "figure.run", preBasal: 0, exerciseBasal: 30, announce: true),
+        .builtIn("Walk", icon: "figure.walk", preBasal: 50, exerciseBasal: 70),
+        .builtIn("Hike", icon: "figure.hiking", preBasal: 40, exerciseBasal: 60),
+        .builtIn("Cycle", icon: "bicycle", preBasal: 30, exerciseBasal: 50),
+        .builtIn("Strength Training", icon: "dumbbell", preBasal: 80, exerciseBasal: 80),
+        .builtIn("Custom", icon: "figure.mixed.cardio", preBasal: 0, exerciseBasal: 50)
+    ]
+
+    static func loadPresets() -> [ExerciseActivityPreset] {
+        guard let data = UserDefaults.standard.data(forKey: storageKey),
+              let decoded = try? JSONDecoder().decode([ExerciseActivityPreset].self, from: data)
+        else {
+            savePresets(builtInPresets)
+            return builtInPresets
+        }
+
+        let missingBuiltIns = builtInPresets.filter { builtIn in
+            !decoded.contains { $0.id == builtIn.id }
+        }
+        return decoded + missingBuiltIns
+    }
+
+    static func preset(named name: String) -> ExerciseActivityPreset {
+        loadPresets().first { $0.activityTypeName == name || $0.id == name } ??
+            builtInPresets.first { $0.activityTypeName == "Custom" }!
+    }
+
+    static func savePreset(_ preset: ExerciseActivityPreset) {
+        var presets = loadPresets()
+        if let index = presets.firstIndex(where: { $0.id == preset.id || $0.activityTypeName == preset.activityTypeName }) {
+            presets[index] = preset
+        } else {
+            presets.append(preset)
+        }
+        savePresets(presets)
+        debugPrint("ExerciseOverride preset saved \(preset.activityTypeName)")
+    }
+
+    static func resetToDefaults() {
+        savePresets(builtInPresets)
+    }
+
+    private static func savePresets(_ presets: [ExerciseActivityPreset]) {
+        guard let data = try? JSONEncoder().encode(presets) else { return }
+        UserDefaults.standard.set(data, forKey: storageKey)
+    }
+}
+
 enum ExerciseSessionState: String, Codable, Equatable {
     case scheduledPreExercise
     case preExerciseActive
@@ -195,6 +298,30 @@ enum ExerciseSessionMetadataStore {
         return try? decoder.decode(ExerciseSessionMetadata.self, from: data)
     }
 
+    static func loadAll() -> [ExerciseSessionMetadata] {
+        let urls = (try? FileManager.default.contentsOfDirectory(
+            at: metadataDirectory,
+            includingPropertiesForKeys: nil
+        )) ?? []
+        return urls.compactMap { url in
+            guard url.pathExtension == "json",
+                  let data = try? Data(contentsOf: url)
+            else { return nil }
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            return try? decoder.decode(ExerciseSessionMetadata.self, from: data)
+        }
+    }
+
+    static func visibleSessionIDs(at now: Date = Date()) -> [String] {
+        loadAll()
+            .filter { metadata in
+                let state = metadata.state(at: now)
+                return state != .completed && state != .cancelled
+            }
+            .map(\.sessionID)
+    }
+
     static func update(sessionID: String, _ changes: (inout ExerciseSessionMetadata) -> Void) {
         guard var metadata = load(sessionID: sessionID) else { return }
         changes(&metadata)
@@ -244,6 +371,7 @@ final class ExerciseGlucoseAnnouncementManager: NSObject {
 
     func startMonitoring() {
         guard timer == nil else { return }
+        reconcileExerciseSessions(reason: "startMonitoring")
         timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             self?.evaluate()
         }
@@ -255,6 +383,7 @@ final class ExerciseGlucoseAnnouncementManager: NSObject {
     }
 
     func evaluate() {
+        reconcileExerciseSessions(reason: "evaluate")
         advanceDueExerciseSessions()
 
         guard let override = activeExerciseOverride(),
@@ -306,6 +435,69 @@ final class ExerciseGlucoseAnnouncementManager: NSObject {
             lastUrgentAnnouncementDate = now
         }
         ExerciseSessionMetadataStore.incrementAnnouncementCount(sessionID: sessionID)
+    }
+
+    @discardableResult func reconcileExerciseSessions(reason: String) -> Bool {
+        let request = OverrideStored.fetchRequest()
+        let sessionIDs = ExerciseSessionMetadataStore.loadAll().map(\.sessionID)
+        request.predicate = sessionIDs.isEmpty
+            ? NSPredicate(
+                format: "enabled == %@ AND name BEGINSWITH %@",
+                true as NSNumber,
+                OverrideStored.exerciseOverrideName + ":"
+            )
+            : NSPredicate(
+                format: "enabled == %@ AND (id IN %@ OR name BEGINSWITH %@)",
+                true as NSNumber,
+                sessionIDs,
+                OverrideStored.exerciseOverrideName + ":"
+            )
+        let overrides = (try? context.fetch(request)) ?? []
+        let now = Date()
+        var changed = false
+
+        for override in overrides {
+            guard let sessionID = override.id,
+                  var metadata = ExerciseSessionMetadataStore.load(sessionID: sessionID)
+            else {
+                override.enabled = false
+                override.isUploadedToNS = false
+                changed = true
+                debugPrint("ExerciseOverride cleanup \(reason): disabled orphan override")
+                continue
+            }
+
+            let state = metadata.state(at: now)
+            let age = now.timeIntervalSince(metadata.sessionCreatedAt)
+            let exerciseAge = metadata.actualExerciseStart.map { now.timeIntervalSince($0) } ?? 0
+            let staleScheduled = metadata.actualExerciseStart == nil && age > 24 * 60 * 60
+            let staleExercise = metadata.actualExerciseStart != nil && metadata
+                .actualExerciseEnd == nil && exerciseAge > 24 * 60 * 60
+
+            if state == .completed || state == .cancelled || staleScheduled || staleExercise {
+                override.enabled = false
+                override.isUploadedToNS = false
+                if staleScheduled || staleExercise {
+                    metadata.cancelledAt = now
+                    metadata.recoverySkippedReason = staleScheduled ? "staleScheduledSession" : "staleExerciseSession"
+                    try? ExerciseSessionMetadataStore.save(metadata)
+                }
+                changed = true
+                debugPrint(
+                    "ExerciseOverride cleanup \(reason): session \(sessionID) state=\(state.rawValue) staleScheduled=\(staleScheduled) staleExercise=\(staleExercise)"
+                )
+            }
+        }
+
+        if context.hasChanges {
+            try? context.save()
+        }
+
+        if changed {
+            stopSpeech()
+            Foundation.NotificationCenter.default.post(name: .didUpdateOverrideConfiguration, object: nil)
+        }
+        return changed
     }
 
     private func speak(
@@ -376,11 +568,14 @@ final class ExerciseGlucoseAnnouncementManager: NSObject {
 
     private func advanceDueExerciseSessions() {
         let request = OverrideStored.fetchRequest()
-        request.predicate = NSPredicate(
-            format: "enabled == %@ AND name BEGINSWITH %@",
-            true as NSNumber,
-            OverrideStored.exerciseOverrideName + ":"
-        )
+        let sessionIDs = ExerciseSessionMetadataStore.visibleSessionIDs()
+        request.predicate = sessionIDs.isEmpty
+            ? NSPredicate(
+                format: "enabled == %@ AND name BEGINSWITH %@",
+                true as NSNumber,
+                OverrideStored.exerciseOverrideName + ":"
+            )
+            : NSPredicate(format: "enabled == %@ AND id IN %@", true as NSNumber, sessionIDs)
         let overrides = (try? context.fetch(request)) ?? []
         let now = Date()
 

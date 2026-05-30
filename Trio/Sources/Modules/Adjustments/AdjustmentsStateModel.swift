@@ -72,6 +72,8 @@ extension Adjustments {
 
         // Exercise Mode Properties
         var exerciseStartDate = Date()
+        var scheduleExerciseForFuture = false
+        var exerciseModeStartError: String?
         var exerciseType: ExerciseType = .run
         var customExerciseTypeName = ""
         var exerciseHasPlannedDuration = true
@@ -98,6 +100,7 @@ extension Adjustments {
         var announcementUrgentEnabled: Bool = true
         var announcementLowThreshold: Decimal = 70
         var announcementHighThreshold: Decimal = 180
+        var exerciseActivityPresets: [ExerciseActivityPreset] = ExerciseActivityPresetStore.loadPresets()
 
         // Core Data
         let coredataContext = CoreDataStack.shared.newTaskContext()
@@ -115,6 +118,7 @@ extension Adjustments {
         /// Subscribes to notifications and initializes settings.
         override func subscribe() {
             ExerciseGlucoseAnnouncementManager.shared.startMonitoring()
+            ExerciseGlucoseAnnouncementManager.shared.reconcileExerciseSessions(reason: "adjustmentsSubscribe")
             setupNotification()
             setupSettings()
             broadcaster.register(SettingsObserver.self, observer: self)

@@ -307,7 +307,17 @@ extension Home {
         }
 
         var latestActiveOverride: OverrideStored? {
-            latestOverride.first(where: { $0.isActive() })
+            if let visibleExercise = latestOverride.first(where: { override in
+                guard override.isExerciseMode,
+                      let sessionID = override.id,
+                      let metadata = ExerciseSessionMetadataStore.load(sessionID: sessionID)
+                else { return false }
+                let state = metadata.state()
+                return state != .completed && state != .cancelled
+            }) {
+                return visibleExercise
+            }
+            return latestOverride.first(where: { $0.isActive() })
         }
 
         var tempTargetString: String? {
@@ -605,6 +615,38 @@ extension Home {
         private func exerciseOverrideSummary(_ fallback: String) -> String {
             guard let override = latestActiveOverride else {
                 return fallback
+            }
+
+            if let sessionID = override.id,
+               let metadata = ExerciseSessionMetadataStore.load(sessionID: sessionID)
+            {
+                let state = metadata.state()
+                let timing: String
+                switch state {
+                case .scheduledPreExercise:
+                    timing = "upcoming"
+                case .preExerciseActive:
+                    timing = "pre-exercise"
+                case .exerciseActive:
+                    timing = "active"
+                case .recoveryActive:
+                    timing = "recovery"
+                case .completed:
+                    timing = "completed"
+                case .cancelled:
+                    timing = "cancelled"
+                }
+                var parts = [
+                    metadata.exerciseTypeName,
+                    timing,
+                    "basal \(Int(override.percentage))%",
+                    override.smbIsOff ? String(localized: "SMB off") : String(localized: "SMB allowed")
+                ]
+                let sensitivity = override.effectivePostExerciseSensitivityPercent()
+                if sensitivity > 0 {
+                    parts.append("sensitivity +\(Int(truncating: NSDecimalNumber(decimal: sensitivity)))%")
+                }
+                return parts.joined(separator: ", ")
             }
 
             var parts = [

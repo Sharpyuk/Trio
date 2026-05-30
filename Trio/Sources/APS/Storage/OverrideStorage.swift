@@ -86,16 +86,18 @@ final class BaseOverrideStorage: @preconcurrency OverrideStorage, Injectable {
     }
 
     func fetchScheduledExerciseOverrides() async throws -> [NSManagedObjectID] {
+        let visibleSessionIDs = ExerciseSessionMetadataStore.visibleSessionIDs()
         let results = try await CoreDataStack.shared.fetchEntitiesAsync(
             ofType: OverrideStored.self,
             onContext: context,
-            predicate: NSPredicate(
-                format: "(name == %@ OR name BEGINSWITH %@) AND enabled == %@ AND date > %@",
-                OverrideStored.exerciseModeName,
-                OverrideStored.exerciseOverrideName + ":",
-                true as NSNumber,
-                Date() as NSDate
-            ),
+            predicate: visibleSessionIDs.isEmpty
+                ? NSPredicate(
+                    format: "(name == %@ OR name BEGINSWITH %@) AND enabled == %@",
+                    OverrideStored.exerciseModeName,
+                    OverrideStored.exerciseOverrideName + ":",
+                    true as NSNumber
+                )
+                : NSPredicate(format: "enabled == %@ AND id IN %@", true as NSNumber, visibleSessionIDs),
             key: "date",
             ascending: true
         )
@@ -107,6 +109,12 @@ final class BaseOverrideStorage: @preconcurrency OverrideStorage, Injectable {
 
             var earliestBySession = [String: OverrideStored]()
             for override in fetchedResults {
+                if let sessionID = override.id,
+                   let metadata = ExerciseSessionMetadataStore.load(sessionID: sessionID)
+                {
+                    let state = metadata.state()
+                    guard state != .completed, state != .cancelled else { continue }
+                }
                 let key = override.id ?? override.objectID.uriRepresentation().absoluteString
                 if let existing = earliestBySession[key],
                    (existing.date ?? .distantFuture) <= (override.date ?? .distantFuture)

@@ -22,24 +22,57 @@ extension Home.StateModel {
     }
 
     private func fetchOverrides() async throws -> [NSManagedObjectID] {
-        let results = try await CoreDataStack.shared.fetchEntitiesAsync(
+        let visibleSessionIDs = ExerciseSessionMetadataStore.visibleSessionIDs()
+        let activeResults = try await CoreDataStack.shared.fetchEntitiesAsync(
             ofType: OverrideStored.self,
             onContext: overrideFetchContext,
             predicate: NSPredicate.lastActiveOverride, // this predicate filters for all Overrides within the last 24h
             key: "date",
             ascending: false
         )
+        let exerciseResults = try await CoreDataStack.shared.fetchEntitiesAsync(
+            ofType: OverrideStored.self,
+            onContext: overrideFetchContext,
+            predicate: visibleSessionIDs.isEmpty
+                ? NSPredicate(
+                    format: "enabled == %@ AND name BEGINSWITH %@",
+                    true as NSNumber,
+                    OverrideStored.exerciseOverrideName + ":"
+                )
+                : NSPredicate(format: "enabled == %@ AND id IN %@", true as NSNumber, visibleSessionIDs),
+            key: "date",
+            ascending: true
+        )
 
         return try await overrideFetchContext.perform {
-            guard let fetchedResults = results as? [OverrideStored] else {
+            guard let fetchedActiveResults = activeResults as? [OverrideStored],
+                  let fetchedExerciseResults = exerciseResults as? [OverrideStored]
+            else {
                 throw CoreDataError.fetchError(function: #function, file: #file)
             }
-            return fetchedResults.filter { $0.isActive() }.map(\.objectID)
+            let visibleExercise = fetchedExerciseResults.filter { override in
+                guard let sessionID = override.id,
+                      let metadata = ExerciseSessionMetadataStore.load(sessionID: sessionID)
+                else { return false }
+                let state = metadata.state()
+                return state != .completed && state != .cancelled
+            }
+            var seen = Set<NSManagedObjectID>()
+            let combined = (fetchedActiveResults.filter { $0.isActive() } + visibleExercise).filter { override in
+                guard !seen.contains(override.objectID) else { return false }
+                seen.insert(override.objectID)
+                return true
+            }
+            return combined.map(\.objectID)
         }
     }
 
     @MainActor private func updateOverrideArray(with objects: [OverrideStored]) {
         overrides = objects
+        let exerciseIDs = objects.filter(\.isExerciseMode).compactMap(\.id).joined(separator: ",")
+        if !exerciseIDs.isEmpty {
+            debugPrint("ExerciseOverride home provider sessions=\(exerciseIDs)")
+        }
     }
 
     // Setup expired Overrides
