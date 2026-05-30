@@ -10,6 +10,12 @@ struct ExerciseReport: Codable, Identifiable {
         let smbSuppressed: Bool
     }
 
+    struct GlucoseValue: Codable {
+        let rawMgdl: Int?
+        let displayValue: Decimal?
+        let displayUnits: String
+    }
+
     struct GlucoseStats: Codable {
         let bgAtPreExerciseStart: Int?
         let bgAtExerciseStart: Int?
@@ -20,6 +26,13 @@ struct ExerciseReport: Codable, Identifiable {
         let averageBGDuringExercise: Decimal?
         let glucoseTrendBeforeExercise: Decimal?
         let glucoseTrendAfterExercise: Decimal?
+        var bgAtPreExerciseStartDisplay: GlucoseValue? = nil
+        var bgAtExerciseStartDisplay: GlucoseValue? = nil
+        var bgAtExerciseEndDisplay: GlucoseValue? = nil
+        var bgAtRecoveryEndDisplay: GlucoseValue? = nil
+        var minBGDuringExerciseDisplay: GlucoseValue? = nil
+        var maxBGDuringExerciseDisplay: GlucoseValue? = nil
+        var averageBGDuringExerciseDisplay: GlucoseValue? = nil
     }
 
     struct InsulinStats: Codable {
@@ -45,6 +58,11 @@ struct ExerciseReport: Codable, Identifiable {
         let numberOfAnnouncementsMade: Int
     }
 
+    struct GuardrailSummary: Codable {
+        let settings: ExerciseGuardrailSettings
+        let events: [ExerciseGuardrailEvent]
+    }
+
     let id: String
     let createdAt: Date
     let exerciseType: String
@@ -64,6 +82,7 @@ struct ExerciseReport: Codable, Identifiable {
     let exerciseConfiguration: PhaseConfiguration
     let recoveryConfiguration: PhaseConfiguration?
     let announcementStats: AnnouncementStats
+    var guardrailSummary: GuardrailSummary? = nil
     let glucoseStats: GlucoseStats
     let insulinStats: InsulinStats
 }
@@ -109,7 +128,9 @@ enum ExerciseReportStore {
     static func csvURL(for report: ExerciseReport) throws -> URL {
         try FileManager.default.createDirectory(at: reportsDirectory, withIntermediateDirectories: true)
         let url = reportsDirectory.appendingPathComponent("exercise-report-\(report.id).csv")
-        let rows = [
+        let startDisplay = report.glucoseStats.bgAtExerciseStartDisplay?.displayValue.map { "\($0)" } ?? ""
+        let endDisplay = report.glucoseStats.bgAtExerciseEndDisplay?.displayValue.map { "\($0)" } ?? ""
+        let rows: [[String]] = [
             ["field", "value"],
             ["exerciseType", report.exerciseType],
             ["preExerciseStartTime", report.preExerciseStartTime?.ISO8601Format() ?? ""],
@@ -118,10 +139,15 @@ enum ExerciseReportStore {
             ["actualExerciseDurationMinutes", "\(report.actualExerciseDurationMinutes)"],
             ["recoveryDurationCalculatedMinutes", "\(report.recoveryDurationCalculatedMinutes)"],
             ["recoverySensitivityAdjustmentCalculated", "\(report.recoverySensitivityAdjustmentCalculated)"],
-            ["decayModelUsed", report.decayModelUsed.title]
+            ["decayModelUsed", report.decayModelUsed.title],
+            ["glucoseUnits", report.glucoseStats.bgAtExerciseStartDisplay?.displayUnits ?? ""],
+            ["bgAtExerciseStartRawMgdl", report.glucoseStats.bgAtExerciseStart.map(String.init) ?? ""],
+            ["bgAtExerciseStartDisplay", startDisplay],
+            ["bgAtExerciseEndRawMgdl", report.glucoseStats.bgAtExerciseEnd.map(String.init) ?? ""],
+            ["bgAtExerciseEndDisplay", endDisplay]
         ]
         let csv = rows.map { $0.map(csvEscape).joined(separator: ",") }.joined(separator: "\n")
-        try csv.write(to: url, atomically: true, encoding: .utf8)
+        try csv.write(to: url, atomically: true, encoding: String.Encoding.utf8)
         return url
     }
 
@@ -367,6 +393,7 @@ extension Adjustments.StateModel {
                 ),
                 postExerciseEnabled: postExerciseEnabled,
                 postExerciseBasalPercentage: postExerciseBasalPercentage,
+                postExerciseTargetEnabled: postExerciseTargetEnabled,
                 postExerciseTarget: postExerciseTarget,
                 postExerciseSuppressSMB: postExerciseSuppressSMB,
                 announcementSettings: ExerciseAnnouncementSettings(
@@ -379,7 +406,8 @@ extension Adjustments.StateModel {
                     highThresholdMgdl: announcementHighThreshold,
                     units: units,
                     announcementsMade: 0
-                )
+                ),
+                guardrailSettings: exerciseGuardrailSettings
             ))
 
             if initialStart <= now.addingTimeInterval(60) {
@@ -438,8 +466,12 @@ extension Adjustments.StateModel {
                 )
                 preExerciseOverride.date = now
                 preExerciseOverride.duration = 2160
-                preExerciseOverride.percentage = settings?.basalPercentage ?? exerciseBasalPercentage
-                preExerciseOverride.smbIsOff = settings?.suppressSMB ?? exerciseSuppressSMB
+                preExerciseOverride.percentage = metadata.guardrailBasalReenabledAt == nil
+                    ? (settings?.basalPercentage ?? exerciseBasalPercentage)
+                    : 100
+                preExerciseOverride.smbIsOff = metadata.guardrailSMBReenabledAt == nil
+                    ? (settings?.suppressSMB ?? exerciseSuppressSMB)
+                    : false
                 preExerciseOverride.target = (settings?.target ?? exerciseTarget) as NSDecimalNumber
             }
             preExerciseOverride.isUploadedToNS = false
@@ -485,7 +517,9 @@ extension Adjustments.StateModel {
         announcementIncludeTrend = preset.includeTrend
         announcementUrgentEnabled = preset.urgentAnnouncementsEnabled
         postExerciseEnabled = preset.recoveryEnabled
+        postExerciseTargetEnabled = preset.postExerciseTargetEnabled
         postExerciseSensitivityDecayType = preset.defaultRecoveryDecayType
+        exerciseGuardrailSettings = preset.guardrailSettings
         debugPrint("ExerciseOverride preset loaded \(preset.activityTypeName)")
     }
 
@@ -508,8 +542,10 @@ extension Adjustments.StateModel {
             includeTrend: announcementIncludeTrend,
             urgentAnnouncementsEnabled: announcementUrgentEnabled,
             recoveryEnabled: postExerciseEnabled,
+            postExerciseTargetEnabled: postExerciseTargetEnabled,
             minimumDurationForRecovery: 10,
-            defaultRecoveryDecayType: postExerciseSensitivityDecayType
+            defaultRecoveryDecayType: postExerciseSensitivityDecayType,
+            guardrailSettings: exerciseGuardrailSettings
         )
         ExerciseActivityPresetStore.savePreset(preset)
         exerciseActivityPresets = ExerciseActivityPresetStore.loadPresets()
@@ -524,6 +560,7 @@ extension Adjustments.StateModel {
         basalPercentage: Double,
         suppressSMB: Bool,
         target: Decimal,
+        overrideTarget: Bool = true,
         sensitivityPercent: Decimal = 0,
         decayType: ExerciseSensitivityDecayType = .flat
     ) -> Override {
@@ -537,7 +574,7 @@ extension Adjustments.StateModel {
             smbIsOff: suppressSMB,
             isPreset: false,
             id: sessionID,
-            overrideTarget: true,
+            overrideTarget: overrideTarget,
             target: target,
             advancedSettings: false,
             isfAndCr: false,
@@ -612,8 +649,12 @@ extension Adjustments.StateModel {
                     )
                     override.date = metadata.scheduledExerciseStart ?? now
                     override.duration = 2160
-                    override.percentage = settings?.basalPercentage ?? exerciseBasalPercentage
-                    override.smbIsOff = settings?.suppressSMB ?? exerciseSuppressSMB
+                    override.percentage = metadata.guardrailBasalReenabledAt == nil
+                        ? (settings?.basalPercentage ?? exerciseBasalPercentage)
+                        : 100
+                    override.smbIsOff = metadata.guardrailSMBReenabledAt == nil
+                        ? (settings?.suppressSMB ?? exerciseSuppressSMB)
+                        : false
                     override.target = (settings?.target ?? exerciseTarget) as NSDecimalNumber
                     override.isUploadedToNS = false
                     metadata.actualExerciseStart = override.date
@@ -769,7 +810,8 @@ extension Adjustments.StateModel {
             let metadata = ExerciseSessionMetadataStore.load(sessionID: sessionID)
             let shouldCreateRecovery = metadata?.postExerciseEnabled ?? postExerciseEnabled
             let recoveryBasalPercentage = metadata?.postExerciseBasalPercentage ?? postExerciseBasalPercentage
-            let recoveryTarget = metadata?.postExerciseTarget ?? postExerciseTarget
+            let recoveryTargetEnabled = metadata?.postExerciseTargetEnabled ?? postExerciseTargetEnabled
+            let recoveryTarget = recoveryTargetEnabled ? (metadata?.postExerciseTarget ?? postExerciseTarget) : 0
             let recoverySuppressSMB = metadata?.postExerciseSuppressSMB ?? postExerciseSuppressSMB
 
             let recoveryRecommendation = shouldCreateRecovery
@@ -808,6 +850,7 @@ extension Adjustments.StateModel {
                     basalPercentage: recoveryBasalPercentage,
                     suppressSMB: recoverySuppressSMB,
                     target: recoveryTarget,
+                    overrideTarget: recoveryTargetEnabled,
                     sensitivityPercent: recoveryRecommendation.sensitivityPercent,
                     decayType: recoveryRecommendation.decayType
                 )
@@ -874,7 +917,8 @@ extension Adjustments.StateModel {
         )
         let shouldCreateRecovery = metadata?.postExerciseEnabled ?? postExerciseEnabled
         let recoveryBasalPercentage = metadata?.postExerciseBasalPercentage ?? postExerciseBasalPercentage
-        let recoveryTarget = metadata?.postExerciseTarget ?? postExerciseTarget
+        let recoveryTargetEnabled = metadata?.postExerciseTargetEnabled ?? postExerciseTargetEnabled
+        let recoveryTarget = recoveryTargetEnabled ? (metadata?.postExerciseTarget ?? postExerciseTarget) : 0
         let recoverySuppressSMB = metadata?.postExerciseSuppressSMB ?? postExerciseSuppressSMB
         let announcementSettings = metadata?.announcementSettings ?? ExerciseAnnouncementSettings(
             enabled: announceGlucoseDuringExercise,
@@ -924,7 +968,7 @@ extension Adjustments.StateModel {
             ),
             recoveryConfiguration: shouldCreateRecovery ? ExerciseReport.PhaseConfiguration(
                 basalPercentage: recoveryBasalPercentage,
-                target: recoveryTarget,
+                target: recoveryTargetEnabled ? recoveryTarget : nil,
                 smbSuppressed: recoverySuppressSMB
             ) : nil,
             announcementStats: ExerciseReport.AnnouncementStats(
@@ -935,6 +979,9 @@ extension Adjustments.StateModel {
                 urgentAnnouncementsEnabled: announcementSettings.urgentAnnouncementsEnabled,
                 numberOfAnnouncementsMade: announcementSettings.announcementsMade
             ),
+            guardrailSummary: metadata.map {
+                ExerciseReport.GuardrailSummary(settings: $0.guardrailSettings, events: $0.guardrailEvents)
+            },
             glucoseStats: glucoseStats,
             insulinStats: insulinStats
         )
@@ -951,18 +998,49 @@ extension Adjustments.StateModel {
         let exerciseReadings = glucoseReadings(from: exerciseStart, to: exerciseEnd)
         let values = exerciseReadings.map { Int($0.glucose) }
         let average = values.isEmpty ? nil : Decimal(values.reduce(0, +)) / Decimal(values.count)
+        let preStartGlucose = preStart.flatMap { nearestGlucose(to: $0).map { Int($0.glucose) } }
+        let startGlucose = nearestGlucose(to: exerciseStart).map { Int($0.glucose) }
+        let endGlucose = nearestGlucose(to: exerciseEnd).map { Int($0.glucose) }
+        let recoveryEndGlucose = recoveryEnd.flatMap { nearestGlucose(to: $0).map { Int($0.glucose) } }
 
         return ExerciseReport.GlucoseStats(
-            bgAtPreExerciseStart: preStart.flatMap { nearestGlucose(to: $0).map { Int($0.glucose) } },
-            bgAtExerciseStart: nearestGlucose(to: exerciseStart).map { Int($0.glucose) },
-            bgAtExerciseEnd: nearestGlucose(to: exerciseEnd).map { Int($0.glucose) },
-            bgAtRecoveryEnd: recoveryEnd.flatMap { nearestGlucose(to: $0).map { Int($0.glucose) } },
+            bgAtPreExerciseStart: preStartGlucose,
+            bgAtExerciseStart: startGlucose,
+            bgAtExerciseEnd: endGlucose,
+            bgAtRecoveryEnd: recoveryEndGlucose,
             minBGDuringExercise: values.min(),
             maxBGDuringExercise: values.max(),
             averageBGDuringExercise: average,
             glucoseTrendBeforeExercise: glucoseTrend(endingAt: exerciseStart),
-            glucoseTrendAfterExercise: glucoseTrend(startingAt: exerciseEnd)
+            glucoseTrendAfterExercise: glucoseTrend(startingAt: exerciseEnd),
+            bgAtPreExerciseStartDisplay: glucoseDisplayValue(preStartGlucose),
+            bgAtExerciseStartDisplay: glucoseDisplayValue(startGlucose),
+            bgAtExerciseEndDisplay: glucoseDisplayValue(endGlucose),
+            bgAtRecoveryEndDisplay: glucoseDisplayValue(recoveryEndGlucose),
+            minBGDuringExerciseDisplay: glucoseDisplayValue(values.min()),
+            maxBGDuringExerciseDisplay: glucoseDisplayValue(values.max()),
+            averageBGDuringExerciseDisplay: average.map {
+                ExerciseReport.GlucoseValue(
+                    rawMgdl: Int(truncating: NSDecimalNumber(decimal: $0)),
+                    displayValue: displayGlucoseValue(rawMgdl: $0),
+                    displayUnits: units.rawValue
+                )
+            }
         )
+    }
+
+    private func glucoseDisplayValue(_ rawMgdl: Int?) -> ExerciseReport.GlucoseValue? {
+        guard let rawMgdl else { return nil }
+        let raw = Decimal(rawMgdl)
+        return ExerciseReport.GlucoseValue(
+            rawMgdl: rawMgdl,
+            displayValue: displayGlucoseValue(rawMgdl: raw),
+            displayUnits: units.rawValue
+        )
+    }
+
+    private func displayGlucoseValue(rawMgdl: Decimal) -> Decimal {
+        units == .mgdL ? rawMgdl : rawMgdl.asMmolL
     }
 
     @MainActor private func exerciseInsulinStats(
@@ -1185,12 +1263,14 @@ extension Adjustments.StateModel {
         customExerciseTypeName = ""
         exerciseActivityPresets = ExerciseActivityPresetStore.loadPresets()
         applyExercisePresetForSelectedType()
+        postExerciseTargetEnabled = false
         postExerciseTarget = 108
         postExerciseBasalPercentage = 100
         postExerciseSuppressSMB = false
         announcementIncludeRateOfChange = false
         announcementLowThreshold = 70
         announcementHighThreshold = 180
+        exerciseGuardrailSettings = ExerciseGuardrailSettings()
     }
 
     /// Rounds a target value to the nearest step.

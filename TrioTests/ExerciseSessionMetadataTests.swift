@@ -56,6 +56,41 @@ import Testing
         #expect(metadata.state(at: now) == .completed)
     }
 
+    @Test("Guardrail mode picker only exposes initial modes") func guardrailModesExposeInformWarnAndCustom() {
+        #expect(ExerciseGuardrailMode.allCases == [.inform, .warn, .custom])
+    }
+
+    @Test("Legacy guardrail intervention modes normalize to custom") func legacyGuardrailModesNormalizeToCustom() {
+        var assistSettings = ExerciseGuardrailSettings()
+        assistSettings.mode = .assist
+
+        var interveneSettings = ExerciseGuardrailSettings()
+        interveneSettings.mode = .intervene
+
+        #expect(assistSettings.normalizedMode == .custom)
+        #expect(interveneSettings.normalizedMode == .custom)
+    }
+
+    @Test("Guardrail custom settings survive coding roundtrip") func guardrailCustomSettingsRoundTrip() throws {
+        var settings = ExerciseGuardrailSettings()
+        settings.enabled = true
+        settings.mode = .custom
+        settings.highGlucoseThresholdMgdl = 216
+        settings.highGlucosePersistenceMinutes = 15
+        settings.trendRequirement = .rising
+        settings.cooldownMinutes = 20
+        settings.actions.reenableBasal = true
+        settings.actions.reenableSMB = true
+        settings.actions.announceWarning = true
+
+        let decoded = try JSONDecoder().decode(
+            ExerciseGuardrailSettings.self,
+            from: JSONEncoder().encode(settings)
+        )
+
+        #expect(decoded == settings)
+    }
+
     private func makeMetadata(
         createdAt: Date,
         scheduledExerciseStart: Date,

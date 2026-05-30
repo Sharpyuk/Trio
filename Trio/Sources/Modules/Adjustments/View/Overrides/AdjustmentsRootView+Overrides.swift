@@ -3,7 +3,10 @@ import SwiftUI
 
 extension Adjustments.RootView {
     @ViewBuilder func overrides() -> some View {
-        if state.isOverrideEnabled, state.activeOverrideName.isNotEmpty {
+        if state.isOverrideEnabled,
+           state.activeOverrideName.isNotEmpty,
+           state.currentActiveOverride?.isExerciseMode != true
+        {
             currentActiveAdjustment
         }
         if state.scheduledExerciseOverrides.isNotEmpty {

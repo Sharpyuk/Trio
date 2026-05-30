@@ -88,18 +88,20 @@ extension Adjustments {
         var exerciseSuppressSMB: Bool = true
         var postExerciseEnabled = true
         var postExerciseDuration: Decimal = 480
+        var postExerciseTargetEnabled = false
         var postExerciseTarget: Decimal = 108
         var postExerciseBasalPercentage: Double = 100
         var postExerciseSuppressSMB: Bool = false
         var postExerciseSensitivityStartPercent: Decimal = 20
         var postExerciseSensitivityDecayType: ExerciseSensitivityDecayType = .linear
         var announceGlucoseDuringExercise: Bool = false
-        var announcementInterval: Decimal = 5
+        var announcementInterval: Decimal = 2
         var announcementIncludeTrend: Bool = true
         var announcementIncludeRateOfChange: Bool = false
         var announcementUrgentEnabled: Bool = true
         var announcementLowThreshold: Decimal = 70
         var announcementHighThreshold: Decimal = 180
+        var exerciseGuardrailSettings = ExerciseGuardrailSettings()
         var exerciseActivityPresets: [ExerciseActivityPreset] = ExerciseActivityPresetStore.loadPresets()
 
         // Core Data

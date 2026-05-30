@@ -45433,6 +45433,9 @@
     "Announce urgent changes immediately" : {
 
     },
+    "Announce warning" : {
+
+    },
     "Announcement interval" : {
 
     },
@@ -45570,6 +45573,9 @@
 
     },
     "Anonymous usage statistics include the app version, your device and iOS version, your paired pump and CGM, and whether Nightscout, Tidepool, and Apple Health are configured (yes/no). No URLs, tokens, or credentials are included." : {
+
+    },
+    "Any" : {
 
     },
     "API secret" : {
@@ -63717,6 +63723,12 @@
         }
       }
     },
+    "Cancel exercise override" : {
+
+    },
+    "Cancel Exercise Override" : {
+
+    },
     "Cancel Exercise Override?" : {
 
     },
@@ -78685,6 +78697,9 @@
           }
         }
       }
+    },
+    "Cooldown" : {
+
     },
     "Copied" : {
       "localizations" : {
@@ -105684,6 +105699,9 @@
         }
       }
     },
+    "Enable Exercise Guardrails" : {
+
+    },
     "Enable Fat and Protein Entries" : {
       "localizations" : {
         "bg" : {
@@ -112341,6 +112359,9 @@
     "End Recovery" : {
 
     },
+    "End recovery?" : {
+
+    },
     "Endpoint" : {
 
     },
@@ -115914,6 +115935,9 @@
 
     },
     "Exercise Start Time" : {
+
+    },
+    "Exercise starts automatically at %@" : {
 
     },
     "Experimental" : {
@@ -132830,6 +132854,9 @@
         }
       }
     },
+    "Guardrails" : {
+
+    },
     "h" : {
       "comment" : "abbreviation for hours\nh",
       "localizations" : {
@@ -135751,6 +135778,9 @@
           }
         }
       }
+    },
+    "High glucose threshold" : {
+
     },
     "High Limit" : {
       "localizations" : {
@@ -145452,6 +145482,9 @@
           }
         }
       }
+    },
+    "Inform" : {
+
     },
     "Information" : {
       "localizations" : {
@@ -156678,6 +156711,9 @@
         }
       }
     },
+    "Log events only. No automatic changes." : {
+
+    },
     "Log export requires ios 15" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -163841,6 +163877,9 @@
           }
         }
       }
+    },
+    "Manually configure thresholds and actions." : {
+
     },
     "Manually entered blood glucose, such as a fingerstick test." : {
       "localizations" : {
@@ -196894,6 +196933,9 @@
         }
       }
     },
+    "Persistence duration" : {
+
+    },
     "Phone NFC required!" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -206092,6 +206134,12 @@
         }
       }
     },
+    "Re-enable basal" : {
+
+    },
+    "Re-enable SMBs" : {
+
+    },
     "Readings" : {
       "comment" : "CGM readings in statView",
       "localizations" : {
@@ -212257,6 +212305,12 @@
           }
         }
       }
+    },
+    "Rising" : {
+
+    },
+    "Rising fast" : {
+
     },
     "Rounded for pump" : {
       "localizations" : {
@@ -221527,6 +221581,9 @@
           }
         }
       }
+    },
+    "Set recovery target glucose" : {
+
     },
     "Set temp targets presets on iPhone first" : {
       "comment" : "Whatch app alert",
@@ -232872,6 +232929,9 @@
         }
       }
     },
+    "Starting shortly…" : {
+
+    },
     "Starting this override will change your Profiles and/or your Target Glucose used for looping during the entire selected duration. Tapping ”Start Profile” will start your new profile or edit your current active profile." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -234894,7 +234954,7 @@
     "Stop Exercise" : {
 
     },
-    "Stop exercise and start recovery now?" : {
+    "Stop exercise?" : {
 
     },
     "Stop Override" : {
@@ -250803,6 +250863,15 @@
         }
       }
     },
+    "This cancels the current Exercise Override and stops exercise effects." : {
+
+    },
+    "This cancels the current Exercise Override, stops any exercise effects and announcements, and saves a report if exercise had already started." : {
+
+    },
+    "This cancels the planned exercise session before active exercise starts. No recovery will be created." : {
+
+    },
     "This cap prevents the system from overestimating how much insulin is needed when carb absorption isn't visible, offering a safeguard for accurate dosing." : {
       "localizations" : {
         "bg" : {
@@ -251942,6 +252011,9 @@
           }
         }
       }
+    },
+    "This ends post-exercise recovery now and restores standard Trio behaviour. The Exercise Report remains saved." : {
+
     },
     "This fallback setting prevents under-dosing by spreading a portion of the entered carbs over time, balancing insulin needs with undetected carb impact." : {
       "localizations" : {
@@ -257733,6 +257805,9 @@
         }
       }
     },
+    "This stops active exercise now, stops glucose announcements, saves an Exercise Report, and starts recovery if the completed duration qualifies." : {
+
+    },
     "This Temp Target preset is currently running. Deleting will stop it." : {
       "localizations" : {
         "bg" : {
@@ -258235,6 +258310,12 @@
           }
         }
       }
+    },
+    "This will end active exercise now, stop glucose announcements, save an Exercise Report, and start recovery if the completed duration qualifies." : {
+
+    },
+    "This will end recovery now, restore standard Trio behaviour, and keep the Exercise Report saved." : {
+
     },
     "This will replace some or all of your current pump settings. Are you sure you want to import profile settings from Nightscout?" : {
       "comment" : "Profile Import AlertProfile Import Alert",
@@ -264880,6 +264961,9 @@
           }
         }
       }
+    },
+    "Trend requirement" : {
+
     },
     "Triggers a confirmation dialog if you attempt to bolus when glucose is < %@ %@." : {
       "localizations" : {
@@ -280327,6 +280411,12 @@
           }
         }
       }
+    },
+    "Warn" : {
+
+    },
+    "Warn me if glucose exceeds threshold." : {
+
     },
     "Warning" : {
       "comment" : "Warning title",

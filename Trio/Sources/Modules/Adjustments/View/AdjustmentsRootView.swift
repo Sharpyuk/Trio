@@ -540,7 +540,7 @@ struct ExerciseModeForm: View {
                                 set: { state.preExerciseDuration = Decimal($0) }
                             ),
                             range: 0 ... 120,
-                            step: 30
+                            step: 5
                         )
                         basalStepper(
                             title: String(localized: "Basal Rate"),
@@ -621,11 +621,67 @@ struct ExerciseModeForm: View {
                             value: $state.postExerciseBasalPercentage
                         )
                         Toggle("Suppress SMBs", isOn: $state.postExerciseSuppressSMB)
-                        targetPicker(
-                            label: String(localized: "Target Glucose"),
-                            selection: $state.postExerciseTarget,
-                            displayPickerTarget: $displayPostTarget
+                        Toggle("Set recovery target glucose", isOn: $state.postExerciseTargetEnabled)
+                        if state.postExerciseTargetEnabled {
+                            targetPicker(
+                                label: String(localized: "Target Glucose"),
+                                selection: $state.postExerciseTarget,
+                                displayPickerTarget: $displayPostTarget
+                            )
+                        }
+                    }
+                }
+                .listRowBackground(Color.chart)
+
+                Section(
+                    header: Text("Guardrails"),
+                    footer: Text(state.exerciseGuardrailSettings.mode.summary)
+                ) {
+                    Toggle("Enable Exercise Guardrails", isOn: $state.exerciseGuardrailSettings.enabled)
+                    if state.exerciseGuardrailSettings.enabled {
+                        Picker("Mode", selection: $state.exerciseGuardrailSettings.mode) {
+                            ForEach(ExerciseGuardrailMode.allCases) { mode in
+                                Text(mode.title).tag(mode)
+                            }
+                        }
+                        glucoseThresholdStepper(
+                            title: String(localized: "High glucose threshold"),
+                            value: $state.exerciseGuardrailSettings.highGlucoseThresholdMgdl,
+                            range: 120 ... 360,
+                            step: 5
                         )
+                        durationStepper(
+                            title: String(localized: "Persistence duration"),
+                            value: Binding(
+                                get: { Int(state.exerciseGuardrailSettings.highGlucosePersistenceMinutes) },
+                                set: { state.exerciseGuardrailSettings.highGlucosePersistenceMinutes = Decimal($0) }
+                            ),
+                            range: 0 ... 60,
+                            step: 5
+                        )
+                        durationStepper(
+                            title: String(localized: "Cooldown"),
+                            value: Binding(
+                                get: { Int(state.exerciseGuardrailSettings.cooldownMinutes) },
+                                set: { state.exerciseGuardrailSettings.cooldownMinutes = Decimal($0) }
+                            ),
+                            range: 0 ... 120,
+                            step: 5
+                        )
+                        Picker("Trend requirement", selection: $state.exerciseGuardrailSettings.trendRequirement) {
+                            ForEach(ExerciseGuardrailTrendRequirement.allCases) { requirement in
+                                Text(requirement.title).tag(requirement)
+                            }
+                        }
+                        if state.exerciseGuardrailSettings.normalizedMode == .custom {
+                            Toggle("Re-enable basal", isOn: $state.exerciseGuardrailSettings.actions.reenableBasal)
+                            Toggle("Re-enable SMBs", isOn: $state.exerciseGuardrailSettings.actions.reenableSMB)
+                            Toggle(
+                                "Cancel exercise override",
+                                isOn: $state.exerciseGuardrailSettings.actions.cancelExerciseOverride
+                            )
+                        }
+                        Toggle("Announce warning", isOn: $state.exerciseGuardrailSettings.actions.announceWarning)
                     }
                 }
                 .listRowBackground(Color.chart)
@@ -820,9 +876,9 @@ struct ExercisePhaseStatusView: View {
         case .preExercise:
             return .yellow
         case .duringExercise:
-            return .purple
-        case .postExercise:
             return .green
+        case .postExercise:
+            return .teal
         case .inactive:
             return .gray
         }
@@ -831,6 +887,9 @@ struct ExercisePhaseStatusView: View {
     private var remainingText: String {
         if sessionState == .scheduledPreExercise {
             guard let start = override.date else { return "scheduled" }
+            if start.timeIntervalSinceNow < 60 {
+                return "starting shortly"
+            }
             return "starts in \(formattedTimeRemaining(start.timeIntervalSinceNow))"
         }
 
@@ -844,6 +903,21 @@ struct ExercisePhaseStatusView: View {
         }
 
         return formattedTimeRemaining(activeUntil.timeIntervalSinceNow) + " remaining"
+    }
+
+    private var transitionText: String? {
+        guard let sessionID = override.id,
+              let metadata = ExerciseSessionMetadataStore.load(sessionID: sessionID),
+              let scheduledStart = metadata.scheduledExerciseStart,
+              sessionState == .scheduledPreExercise || sessionState == .preExerciseActive
+        else { return nil }
+
+        if scheduledStart.timeIntervalSinceNow <= 60 {
+            return String(localized: "Starting shortly…")
+        }
+        return String(
+            localized: "Exercise starts automatically at \(DateFormatter.localizedString(from: scheduledStart, dateStyle: .none, timeStyle: .short))"
+        )
     }
 
     private var detailText: String {
@@ -871,6 +945,11 @@ struct ExercisePhaseStatusView: View {
                     Text(detailText)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    if let transitionText {
+                        Text(transitionText)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 Spacer()
             }
@@ -896,9 +975,8 @@ struct ExercisePhaseStatusView: View {
                     Button {
                         startExerciseNow()
                     } label: {
-                        Label("Start Exercise Now", systemImage: "figure.run")
+                        Text("Start Exercise Now")
                     }
-                    .buttonStyle(.borderless)
 
                     Spacer()
 
@@ -906,15 +984,18 @@ struct ExercisePhaseStatusView: View {
                 }
             } else if phase == .duringExercise {
                 HStack {
-                    Button(role: .destructive) {
+                    Button {
                         confirmStopExercise = true
                     } label: {
-                        Label("Stop Exercise", systemImage: "stop.circle")
+                        Text("Stop Exercise")
                     }
-                    .buttonStyle(.borderless)
-                    .confirmationDialog("Stop exercise and start recovery now?", isPresented: $confirmStopExercise) {
+                    .confirmationDialog("Stop exercise?", isPresented: $confirmStopExercise) {
                         Button("Stop Exercise", role: .destructive, action: stopExercise)
                         Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text(
+                            "This will end active exercise now, stop glucose announcements, save an Exercise Report, and start recovery if the completed duration qualifies."
+                        )
                     }
 
                     Spacer()
@@ -923,15 +1004,16 @@ struct ExercisePhaseStatusView: View {
                 }
             } else if phase == .postExercise {
                 HStack {
-                    Button(role: .destructive) {
+                    Button {
                         confirmEndRecovery = true
                     } label: {
-                        Label("End Recovery", systemImage: "xmark.circle")
+                        Text("End Recovery")
                     }
-                    .buttonStyle(.borderless)
                     .confirmationDialog("End post-exercise recovery now?", isPresented: $confirmEndRecovery) {
                         Button("End Recovery", role: .destructive, action: endRecovery)
                         Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("This will end recovery now, restore standard Trio behaviour, and keep the Exercise Report saved.")
                     }
 
                     Spacer()
@@ -946,12 +1028,15 @@ struct ExercisePhaseStatusView: View {
         Button(role: .destructive) {
             confirmCancelExercise = true
         } label: {
-            Label("Cancel", systemImage: "xmark")
+            Text("Cancel")
         }
-        .buttonStyle(.borderless)
         .confirmationDialog("Cancel Exercise Override?", isPresented: $confirmCancelExercise) {
-            Button("Cancel Override", role: .destructive, action: cancelExercise)
+            Button("Cancel", role: .destructive, action: cancelExercise)
             Button("Keep Running", role: .cancel) {}
+        } message: {
+            Text(
+                "This cancels the current Exercise Override, stops any exercise effects and announcements, and saves a report if exercise had already started."
+            )
         }
     }
 
@@ -1047,12 +1132,27 @@ struct ExerciseReportDetailView: View {
             }
 
             Section("Glucose") {
-                row("BG at pre start", optionalInt(report.glucoseStats.bgAtPreExerciseStart))
-                row("BG at exercise start", optionalInt(report.glucoseStats.bgAtExerciseStart))
-                row("BG at exercise end", optionalInt(report.glucoseStats.bgAtExerciseEnd))
-                row("Min during exercise", optionalInt(report.glucoseStats.minBGDuringExercise))
-                row("Max during exercise", optionalInt(report.glucoseStats.maxBGDuringExercise))
-                row("Average during exercise", report.glucoseStats.averageBGDuringExercise.map { "\($0)" } ?? "Unavailable")
+                row(
+                    "BG at pre start",
+                    glucoseValue(report.glucoseStats.bgAtPreExerciseStartDisplay, raw: report.glucoseStats.bgAtPreExerciseStart)
+                )
+                row(
+                    "BG at exercise start",
+                    glucoseValue(report.glucoseStats.bgAtExerciseStartDisplay, raw: report.glucoseStats.bgAtExerciseStart)
+                )
+                row(
+                    "BG at exercise end",
+                    glucoseValue(report.glucoseStats.bgAtExerciseEndDisplay, raw: report.glucoseStats.bgAtExerciseEnd)
+                )
+                row(
+                    "Min during exercise",
+                    glucoseValue(report.glucoseStats.minBGDuringExerciseDisplay, raw: report.glucoseStats.minBGDuringExercise)
+                )
+                row(
+                    "Max during exercise",
+                    glucoseValue(report.glucoseStats.maxBGDuringExerciseDisplay, raw: report.glucoseStats.maxBGDuringExercise)
+                )
+                row("Average during exercise", glucoseValue(report.glucoseStats.averageBGDuringExerciseDisplay, raw: nil))
                 row("Trend before", report.glucoseStats.glucoseTrendBeforeExercise.map { "\($0)" } ?? "Unavailable")
                 row("Trend after", report.glucoseStats.glucoseTrendAfterExercise.map { "\($0)" } ?? "Unavailable")
             }
@@ -1074,6 +1174,24 @@ struct ExerciseReportDetailView: View {
                 row("Rate of change", report.announcementStats.includeRateOfChange ? "Included" : "Off")
                 row("Urgent", report.announcementStats.urgentAnnouncementsEnabled ? "Enabled" : "Off")
                 row("Announcements made", "\(report.announcementStats.numberOfAnnouncementsMade)")
+            }
+
+            if let guardrailSummary = report.guardrailSummary {
+                Section("Guardrails") {
+                    row("Mode", guardrailSummary.settings.mode.title)
+                    row("High threshold", glucoseValue(
+                        ExerciseReport.GlucoseValue(
+                            rawMgdl: Int(truncating: NSDecimalNumber(
+                                decimal: guardrailSummary.settings
+                                    .highGlucoseThresholdMgdl
+                            )),
+                            displayValue: nil,
+                            displayUnits: ""
+                        ),
+                        raw: Int(truncating: NSDecimalNumber(decimal: guardrailSummary.settings.highGlucoseThresholdMgdl))
+                    ))
+                    row("Events", "\(guardrailSummary.events.count)")
+                }
             }
 
             Section("Export") {
@@ -1107,8 +1225,18 @@ struct ExerciseReportDetailView: View {
         }
     }
 
-    private func optionalInt(_ value: Int?) -> String {
-        value.map(String.init) ?? "Unavailable"
+    private func glucoseValue(_ value: ExerciseReport.GlucoseValue?, raw: Int?) -> String {
+        if let value, let displayValue = value.displayValue {
+            let formatted: String
+            if value.displayUnits == GlucoseUnits.mmolL.rawValue {
+                formatted = displayValue.formattedAsMmolL
+            } else {
+                formatted = Formatter.glucoseFormatter(for: .mgdL)
+                    .string(from: displayValue as NSDecimalNumber) ?? "\(displayValue)"
+            }
+            return "\(formatted) \(value.displayUnits)"
+        }
+        return raw.map { "\($0) \(GlucoseUnits.mgdL.rawValue)" } ?? "Unavailable"
     }
 
     private func optionalDecimal(_ value: Decimal?) -> String {

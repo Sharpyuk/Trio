@@ -303,6 +303,9 @@ extension Home {
 
             let components = [durationString, percentString, targetString, smbToggleString, smbMinuteString, uamMinuteString]
                 .filter { !$0.isEmpty }
+            if latestOverride.isExerciseMode {
+                return components.isEmpty ? OverrideStored.exerciseOverrideName : components.joined(separator: ", ")
+            }
             return components.isEmpty ? nil : components.joined(separator: ", ")
         }
 
@@ -664,6 +667,60 @@ extension Home {
             return parts.joined(separator: ", ")
         }
 
+        private func exerciseCancelButtonTitle() -> String {
+            guard let phase = latestActiveOverride?.exercisePhase else {
+                return String(localized: "Cancel Exercise Override")
+            }
+            switch phase {
+            case .preExercise:
+                return String(localized: "Cancel Exercise Override")
+            case .duringExercise:
+                return String(localized: "Stop Exercise")
+            case .postExercise:
+                return String(localized: "End Recovery")
+            case .inactive:
+                return String(localized: "Cancel Exercise Override")
+            }
+        }
+
+        private func exerciseCancelDialogTitle() -> String {
+            guard let phase = latestActiveOverride?.exercisePhase else {
+                return String(localized: "Cancel Exercise Override?")
+            }
+            switch phase {
+            case .preExercise:
+                return String(localized: "Cancel Exercise Override?")
+            case .duringExercise:
+                return String(localized: "Stop exercise?")
+            case .postExercise:
+                return String(localized: "End recovery?")
+            case .inactive:
+                return String(localized: "Cancel Exercise Override?")
+            }
+        }
+
+        private func exerciseCancelDialogMessage() -> String {
+            guard let phase = latestActiveOverride?.exercisePhase else {
+                return String(localized: "This cancels the current Exercise Override and stops exercise effects.")
+            }
+            switch phase {
+            case .preExercise:
+                return String(
+                    localized: "This cancels the planned exercise session before active exercise starts. No recovery will be created."
+                )
+            case .duringExercise:
+                return String(
+                    localized: "This stops active exercise now, stops glucose announcements, saves an Exercise Report, and starts recovery if the completed duration qualifies."
+                )
+            case .postExercise:
+                return String(
+                    localized: "This ends post-exercise recovery now and restores standard Trio behaviour. The Exercise Report remains saved."
+                )
+            case .inactive:
+                return String(localized: "This cancels the current Exercise Override and stops exercise effects.")
+            }
+        }
+
         @ViewBuilder func adjustmentsTempTargetView(_ tempTargetString: String) -> some View {
             Group {
                 Image(systemName: "target")
@@ -717,17 +774,30 @@ extension Home {
             Image(systemName: "xmark.app")
                 .font(.title)
                 .confirmationDialog(
-                    "Stop the Override \"\(latestActiveOverride?.name ?? "")\"?",
+                    latestActiveOverride?.isExerciseMode == true
+                        ? exerciseCancelDialogTitle()
+                        : "Stop the Override \"\(latestActiveOverride?.name ?? "")\"?",
                     isPresented: $isConfirmStopOverridePresented,
                     titleVisibility: .visible
                 ) {
-                    Button("Stop", role: .destructive) {
+                    Button(
+                        latestActiveOverride?.isExerciseMode == true ? exerciseCancelButtonTitle() : "Stop",
+                        role: .destructive
+                    ) {
                         Task {
                             guard let objectID = latestActiveOverride?.objectID else { return }
-                            await state.cancelOverride(withID: objectID)
+                            if latestActiveOverride?.isExerciseMode == true {
+                                await state.cancelOverride(withID: objectID)
+                            } else {
+                                await state.cancelOverride(withID: objectID)
+                            }
                         }
                     }
                     Button("Cancel", role: .cancel) {}
+                } message: {
+                    if latestActiveOverride?.isExerciseMode == true {
+                        Text(exerciseCancelDialogMessage())
+                    }
                 }
                 .padding(.trailing, 8)
                 .onTapGesture {
@@ -826,10 +896,17 @@ extension Home {
                     }
                 }.padding(.horizontal, 10)
                     .confirmationDialog("Adjustment to Stop", isPresented: $showCancelConfirmDialog) {
-                        Button("Stop Override", role: .destructive) {
+                        Button(
+                            latestActiveOverride?.isExerciseMode == true ? exerciseCancelButtonTitle() : "Stop Override",
+                            role: .destructive
+                        ) {
                             Task {
                                 guard let objectID = latestActiveOverride?.objectID else { return }
-                                await state.cancelOverride(withID: objectID)
+                                if latestActiveOverride?.isExerciseMode == true {
+                                    await state.cancelOverride(withID: objectID)
+                                } else {
+                                    await state.cancelOverride(withID: objectID)
+                                }
                             }
                         }
                         Button("Stop Temp Target", role: .destructive) {

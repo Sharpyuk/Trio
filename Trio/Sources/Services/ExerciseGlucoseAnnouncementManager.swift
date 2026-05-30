@@ -5,7 +5,7 @@ import Foundation
 
 struct ExerciseAnnouncementSettings: Codable, Equatable {
     var enabled: Bool = false
-    var intervalMinutes: Decimal = 5
+    var intervalMinutes: Decimal = 2
     var includeTrend: Bool = true
     var includeRateOfChange: Bool = false
     var urgentAnnouncementsEnabled: Bool = true
@@ -13,6 +13,100 @@ struct ExerciseAnnouncementSettings: Codable, Equatable {
     var highThresholdMgdl: Decimal = 180
     var units: GlucoseUnits = .mgdL
     var announcementsMade: Int = 0
+}
+
+enum ExerciseGuardrailMode: String, Codable, CaseIterable, Identifiable {
+    case inform
+    case warn
+    case assist
+    case intervene
+    case custom
+
+    static var allCases: [ExerciseGuardrailMode] {
+        [.inform, .warn, .custom]
+    }
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .inform: return String(localized: "Inform")
+        case .warn: return String(localized: "Warn")
+        case .assist: return String(localized: "Custom")
+        case .intervene: return String(localized: "Custom")
+        case .custom: return String(localized: "Custom")
+        }
+    }
+
+    var summary: String {
+        switch self {
+        case .inform:
+            return String(localized: "Log events only. No automatic changes.")
+        case .warn:
+            return String(localized: "Warn me if glucose exceeds threshold.")
+        case .assist,
+             .intervene:
+            return String(localized: "Manually configure thresholds and actions.")
+        case .custom:
+            return String(localized: "Manually configure thresholds and actions.")
+        }
+    }
+}
+
+enum ExerciseGuardrailTrendRequirement: String, Codable, CaseIterable, Identifiable {
+    case any
+    case rising
+    case risingFast
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .any: return String(localized: "Any")
+        case .rising: return String(localized: "Rising")
+        case .risingFast: return String(localized: "Rising fast")
+        }
+    }
+}
+
+struct ExerciseGuardrailActions: Codable, Equatable {
+    var reenableBasal = false
+    var reenableSMB = false
+    var cancelExerciseOverride = false
+    var announceWarning = true
+    var logOnly = false
+}
+
+struct ExerciseGuardrailSettings: Codable, Equatable {
+    var enabled = false
+    var mode: ExerciseGuardrailMode = .inform
+    var highGlucoseThresholdMgdl: Decimal = 216
+    var highGlucosePersistenceMinutes: Decimal = 10
+    var trendRequirement: ExerciseGuardrailTrendRequirement = .any
+    var actions = ExerciseGuardrailActions()
+    var cooldownMinutes: Decimal = 15
+
+    var normalizedMode: ExerciseGuardrailMode {
+        switch mode {
+        case .assist,
+             .intervene:
+            return .custom
+        default:
+            return mode
+        }
+    }
+}
+
+struct ExerciseGuardrailEvent: Codable, Equatable, Identifiable {
+    var id = UUID().uuidString
+    var timestamp: Date
+    var glucoseMgdl: Decimal?
+    var glucoseDisplayValue: Decimal?
+    var glucoseDisplayUnits: String
+    var trend: String?
+    var phase: String
+    var triggerReason: String
+    var actionsTaken: [String]
 }
 
 struct ExerciseActivityPreset: Codable, Identifiable, Equatable {
@@ -32,8 +126,10 @@ struct ExerciseActivityPreset: Codable, Identifiable, Equatable {
     var includeTrend: Bool
     var urgentAnnouncementsEnabled: Bool
     var recoveryEnabled: Bool
+    var postExerciseTargetEnabled: Bool
     var minimumDurationForRecovery: Decimal
     var defaultRecoveryDecayType: ExerciseSensitivityDecayType
+    var guardrailSettings: ExerciseGuardrailSettings
 
     static func builtIn(
         _ name: String,
@@ -55,12 +151,14 @@ struct ExerciseActivityPreset: Codable, Identifiable, Equatable {
             exerciseBasalPercent: exerciseBasal,
             exerciseSMBSuppressed: true,
             announceGlucoseEnabled: announce,
-            announcementInterval: 5,
+            announcementInterval: 2,
             includeTrend: true,
             urgentAnnouncementsEnabled: true,
             recoveryEnabled: true,
+            postExerciseTargetEnabled: false,
             minimumDurationForRecovery: 10,
-            defaultRecoveryDecayType: .linear
+            defaultRecoveryDecayType: .linear,
+            guardrailSettings: ExerciseGuardrailSettings()
         )
     }
 }
@@ -150,10 +248,16 @@ struct ExerciseSessionMetadata: Codable, Equatable {
     var exerciseSettings: PhaseSettings?
     let postExerciseEnabled: Bool
     let postExerciseBasalPercentage: Double
+    let postExerciseTargetEnabled: Bool
     let postExerciseTarget: Decimal
     let postExerciseSuppressSMB: Bool
     var recoverySkippedReason: String?
     var announcementSettings: ExerciseAnnouncementSettings
+    var guardrailSettings = ExerciseGuardrailSettings()
+    var guardrailEvents: [ExerciseGuardrailEvent] = []
+    var lastGuardrailTriggerAt: Date?
+    var guardrailBasalReenabledAt: Date?
+    var guardrailSMBReenabledAt: Date?
 
     enum CodingKeys: String, CodingKey {
         case sessionID
@@ -172,10 +276,16 @@ struct ExerciseSessionMetadata: Codable, Equatable {
         case exerciseSettings
         case postExerciseEnabled
         case postExerciseBasalPercentage
+        case postExerciseTargetEnabled
         case postExerciseTarget
         case postExerciseSuppressSMB
         case recoverySkippedReason
         case announcementSettings
+        case guardrailSettings
+        case guardrailEvents
+        case lastGuardrailTriggerAt
+        case guardrailBasalReenabledAt
+        case guardrailSMBReenabledAt
     }
 
     init(
@@ -195,10 +305,16 @@ struct ExerciseSessionMetadata: Codable, Equatable {
         exerciseSettings: PhaseSettings? = nil,
         postExerciseEnabled: Bool,
         postExerciseBasalPercentage: Double,
+        postExerciseTargetEnabled: Bool = false,
         postExerciseTarget: Decimal,
         postExerciseSuppressSMB: Bool,
         recoverySkippedReason: String? = nil,
-        announcementSettings: ExerciseAnnouncementSettings
+        announcementSettings: ExerciseAnnouncementSettings,
+        guardrailSettings: ExerciseGuardrailSettings = ExerciseGuardrailSettings(),
+        guardrailEvents: [ExerciseGuardrailEvent] = [],
+        lastGuardrailTriggerAt: Date? = nil,
+        guardrailBasalReenabledAt: Date? = nil,
+        guardrailSMBReenabledAt: Date? = nil
     ) {
         self.sessionID = sessionID
         self.exerciseTypeName = exerciseTypeName
@@ -216,10 +332,16 @@ struct ExerciseSessionMetadata: Codable, Equatable {
         self.exerciseSettings = exerciseSettings
         self.postExerciseEnabled = postExerciseEnabled
         self.postExerciseBasalPercentage = postExerciseBasalPercentage
+        self.postExerciseTargetEnabled = postExerciseTargetEnabled
         self.postExerciseTarget = postExerciseTarget
         self.postExerciseSuppressSMB = postExerciseSuppressSMB
         self.recoverySkippedReason = recoverySkippedReason
         self.announcementSettings = announcementSettings
+        self.guardrailSettings = guardrailSettings
+        self.guardrailEvents = guardrailEvents
+        self.lastGuardrailTriggerAt = lastGuardrailTriggerAt
+        self.guardrailBasalReenabledAt = guardrailBasalReenabledAt
+        self.guardrailSMBReenabledAt = guardrailSMBReenabledAt
     }
 
     init(from decoder: Decoder) throws {
@@ -240,11 +362,18 @@ struct ExerciseSessionMetadata: Codable, Equatable {
         exerciseSettings = try container.decodeIfPresent(PhaseSettings.self, forKey: .exerciseSettings)
         postExerciseEnabled = try container.decode(Bool.self, forKey: .postExerciseEnabled)
         postExerciseBasalPercentage = try container.decode(Double.self, forKey: .postExerciseBasalPercentage)
+        postExerciseTargetEnabled = try container.decodeIfPresent(Bool.self, forKey: .postExerciseTargetEnabled) ?? false
         postExerciseTarget = try container.decode(Decimal.self, forKey: .postExerciseTarget)
         postExerciseSuppressSMB = try container.decode(Bool.self, forKey: .postExerciseSuppressSMB)
         recoverySkippedReason = try container.decodeIfPresent(String.self, forKey: .recoverySkippedReason)
         announcementSettings = try container.decodeIfPresent(ExerciseAnnouncementSettings.self, forKey: .announcementSettings)
             ?? ExerciseAnnouncementSettings()
+        guardrailSettings = try container.decodeIfPresent(ExerciseGuardrailSettings.self, forKey: .guardrailSettings)
+            ?? ExerciseGuardrailSettings()
+        guardrailEvents = try container.decodeIfPresent([ExerciseGuardrailEvent].self, forKey: .guardrailEvents) ?? []
+        lastGuardrailTriggerAt = try container.decodeIfPresent(Date.self, forKey: .lastGuardrailTriggerAt)
+        guardrailBasalReenabledAt = try container.decodeIfPresent(Date.self, forKey: .guardrailBasalReenabledAt)
+        guardrailSMBReenabledAt = try container.decodeIfPresent(Date.self, forKey: .guardrailSMBReenabledAt)
     }
 
     func state(at now: Date = Date()) -> ExerciseSessionState {
@@ -364,6 +493,7 @@ final class ExerciseGlucoseAnnouncementManager: NSObject {
     private var lastAnnouncementDate: Date?
     private var lastUrgentAnnouncementDate: Date?
     private var activeSessionID: String?
+    private var lastGuardrailGlucoseDateBySession: [String: Date] = [:]
 
     override private init() {
         super.init()
@@ -385,6 +515,8 @@ final class ExerciseGlucoseAnnouncementManager: NSObject {
     func evaluate() {
         reconcileExerciseSessions(reason: "evaluate")
         advanceDueExerciseSessions()
+
+        evaluateGuardrails()
 
         guard let override = activeExerciseOverride(),
               let sessionID = override.id,
@@ -435,6 +567,218 @@ final class ExerciseGlucoseAnnouncementManager: NSObject {
             lastUrgentAnnouncementDate = now
         }
         ExerciseSessionMetadataStore.incrementAnnouncementCount(sessionID: sessionID)
+    }
+
+    private func evaluateGuardrails() {
+        guard let latest = latestGlucose(),
+              let latestDate = latest.date,
+              abs(latestDate.timeIntervalSinceNow) <= 20 * 60
+        else {
+            return
+        }
+
+        let trendInfo = trend(for: latest)
+        for override in activeExerciseSessionOverrides() {
+            guard let sessionID = override.id,
+                  var metadata = ExerciseSessionMetadataStore.load(sessionID: sessionID),
+                  metadata.guardrailSettings.enabled,
+                  metadata.state() != .completed,
+                  metadata.state() != .cancelled,
+                  shouldEvaluateGuardrail(sessionID: sessionID, latestDate: latestDate),
+                  highGlucoseGuardrailTriggered(
+                      latest: latest,
+                      trend: trendInfo.trend,
+                      settings: metadata.guardrailSettings,
+                      now: latestDate
+                  )
+            else {
+                continue
+            }
+
+            let now = Date()
+            let cooldown = max(0, NSDecimalNumber(decimal: metadata.guardrailSettings.cooldownMinutes).doubleValue * 60)
+            if let last = metadata.lastGuardrailTriggerAt, now.timeIntervalSince(last) < cooldown {
+                continue
+            }
+
+            let actionsTaken = applyGuardrailActions(
+                sessionID: sessionID,
+                override: override,
+                metadata: &metadata,
+                latest: latest,
+                trend: trendInfo.trend,
+                now: now
+            )
+            guard !actionsTaken.isEmpty else { continue }
+
+            metadata.lastGuardrailTriggerAt = now
+            metadata.guardrailEvents.append(ExerciseGuardrailEvent(
+                timestamp: now,
+                glucoseMgdl: Decimal(Int(latest.glucose)),
+                glucoseDisplayValue: displayGlucoseValue(
+                    rawMgdl: Decimal(Int(latest.glucose)),
+                    units: metadata.announcementSettings.units
+                ),
+                glucoseDisplayUnits: metadata.announcementSettings.units.rawValue,
+                trend: trendInfo.trend.rawValue,
+                phase: (override.exercisePhase ?? .inactive).title,
+                triggerReason: "highGlucosePersisted",
+                actionsTaken: actionsTaken
+            ))
+            try? ExerciseSessionMetadataStore.save(metadata)
+            lastGuardrailGlucoseDateBySession[sessionID] = latestDate
+            debugPrint(
+                "ExerciseOverride guardrail session \(sessionID) phase=\((override.exercisePhase ?? .inactive).title) actions=\(actionsTaken.joined(separator: ","))"
+            )
+        }
+
+        if context.hasChanges {
+            try? context.save()
+            Foundation.NotificationCenter.default.post(name: .didUpdateOverrideConfiguration, object: nil)
+        }
+    }
+
+    private func shouldEvaluateGuardrail(sessionID: String, latestDate: Date) -> Bool {
+        if let lastDate = lastGuardrailGlucoseDateBySession[sessionID], lastDate >= latestDate {
+            return false
+        }
+        return true
+    }
+
+    private func highGlucoseGuardrailTriggered(
+        latest: GlucoseStored,
+        trend: ExerciseGlucoseTrend,
+        settings: ExerciseGuardrailSettings,
+        now: Date
+    ) -> Bool {
+        guard Decimal(Int(latest.glucose)) >= settings.highGlucoseThresholdMgdl,
+              trendMatchesRequirement(trend, settings.trendRequirement)
+        else {
+            return false
+        }
+
+        let persistenceSeconds = max(
+            0,
+            NSDecimalNumber(decimal: settings.highGlucosePersistenceMinutes).doubleValue * 60
+        )
+        guard persistenceSeconds > 0 else { return true }
+
+        let start = now.addingTimeInterval(-persistenceSeconds)
+        let request = GlucoseStored.fetchRequest()
+        request.predicate = NSPredicate(format: "date >= %@ AND date <= %@", start as NSDate, now as NSDate)
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \GlucoseStored.date, ascending: true)]
+        let readings = (try? context.fetch(request)) ?? []
+        guard let first = readings.first,
+              let firstDate = first.date,
+              now.timeIntervalSince(firstDate) >= persistenceSeconds * 0.8,
+              readings.count >= 2
+        else {
+            return false
+        }
+
+        return readings.allSatisfy { Decimal(Int($0.glucose)) >= settings.highGlucoseThresholdMgdl }
+    }
+
+    private func trendMatchesRequirement(
+        _ trend: ExerciseGlucoseTrend,
+        _ requirement: ExerciseGuardrailTrendRequirement
+    ) -> Bool {
+        switch requirement {
+        case .any:
+            return true
+        case .rising:
+            return trend == .risingSlowly || trend == .risingFast
+        case .risingFast:
+            return trend == .risingFast
+        }
+    }
+
+    private func applyGuardrailActions(
+        sessionID: String,
+        override _: OverrideStored,
+        metadata: inout ExerciseSessionMetadata,
+        latest: GlucoseStored,
+        trend: ExerciseGlucoseTrend,
+        now: Date
+    ) -> [String] {
+        let mode = metadata.guardrailSettings.normalizedMode
+        var actionsTaken: [String] = []
+
+        switch mode {
+        case .inform:
+            actionsTaken.append("logged")
+
+        case .warn:
+            speakGuardrailWarning(latest: latest, trend: trend, units: metadata.announcementSettings.units)
+            actionsTaken.append("warned")
+
+        case .custom:
+            let actions = metadata.guardrailSettings.actions
+            if actions.announceWarning {
+                speakGuardrailWarning(latest: latest, trend: trend, units: metadata.announcementSettings.units)
+                actionsTaken.append("announced")
+            }
+            if actions.reenableBasal, metadata.guardrailBasalReenabledAt == nil {
+                reenableBasal(sessionID: sessionID, from: now)
+                metadata.guardrailBasalReenabledAt = now
+                actionsTaken.append("reenabledBasal")
+            }
+            if actions.reenableSMB, metadata.guardrailSMBReenabledAt == nil {
+                reenableSMB(sessionID: sessionID, from: now)
+                metadata.guardrailSMBReenabledAt = now
+                actionsTaken.append("reenabledSMB")
+            }
+            if actions.cancelExerciseOverride {
+                cancelExerciseSession(sessionID: sessionID, at: now)
+                metadata.cancelledAt = now
+                if metadata.actualExerciseStart != nil, metadata.actualExerciseEnd == nil {
+                    metadata.actualExerciseEnd = now
+                }
+                metadata.recoverySkippedReason = "guardrailCancelled"
+                actionsTaken.append("cancelledExerciseOverride")
+            }
+
+        case .assist,
+             .intervene:
+            break
+        }
+
+        return actionsTaken
+    }
+
+    private func reenableBasal(sessionID: String, from _: Date) {
+        for override in sessionOverrides(sessionID: sessionID) where override.enabled {
+            override.percentage = 100
+            override.isUploadedToNS = false
+        }
+    }
+
+    private func reenableSMB(sessionID: String, from _: Date) {
+        for override in sessionOverrides(sessionID: sessionID) where override.enabled {
+            override.smbIsOff = false
+            override.isUploadedToNS = false
+        }
+    }
+
+    private func cancelExerciseSession(sessionID: String, at _: Date) {
+        for override in sessionOverrides(sessionID: sessionID) where override.enabled {
+            override.enabled = false
+            override.isUploadedToNS = false
+        }
+        stopSpeech()
+    }
+
+    private func speakGuardrailWarning(latest: GlucoseStored, trend: ExerciseGlucoseTrend, units: GlucoseUnits) {
+        guard !synthesizer.isSpeaking else { return }
+        let glucose = Decimal(Int(latest.glucose))
+        let display = displayGlucoseValue(rawMgdl: glucose, units: units)
+        let text = units == .mmolL
+            ? formatDecimal(display, maximumFractionDigits: 1)
+            : formatDecimal(display, maximumFractionDigits: 0)
+        let utterance = AVSpeechUtterance(string: "Exercise guardrail warning. Glucose \(text), \(trend.rawValue).")
+        utterance.voice = AVSpeechSynthesisVoice(language: Locale.current.identifier)
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
+        synthesizer.speak(utterance)
     }
 
     @discardableResult func reconcileExerciseSessions(reason: String) -> Bool {
@@ -566,6 +910,45 @@ final class ExerciseGlucoseAnnouncementManager: NSObject {
         }
     }
 
+    private func activeExerciseSessionOverrides() -> [OverrideStored] {
+        let request = OverrideStored.fetchRequest()
+        let sessionIDs = ExerciseSessionMetadataStore.visibleSessionIDs()
+        request.predicate = sessionIDs.isEmpty
+            ? NSPredicate(
+                format: "enabled == %@ AND name BEGINSWITH %@",
+                true as NSNumber,
+                OverrideStored.exerciseOverrideName + ":"
+            )
+            : NSPredicate(format: "enabled == %@ AND id IN %@", true as NSNumber, sessionIDs)
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \OverrideStored.date, ascending: false)]
+        let overrides = (try? context.fetch(request)) ?? []
+        return overrides.filter {
+            guard $0.isActive(),
+                  $0.isExerciseMode,
+                  let sessionID = $0.id,
+                  let metadata = ExerciseSessionMetadataStore.load(sessionID: sessionID)
+            else {
+                return false
+            }
+            switch metadata.state() {
+            case .exerciseActive,
+                 .preExerciseActive,
+                 .recoveryActive:
+                return true
+            case .cancelled,
+                 .completed,
+                 .scheduledPreExercise:
+                return false
+            }
+        }
+    }
+
+    private func sessionOverrides(sessionID: String) -> [OverrideStored] {
+        let request = OverrideStored.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", sessionID)
+        return (try? context.fetch(request)) ?? []
+    }
+
     private func advanceDueExerciseSessions() {
         let request = OverrideStored.fetchRequest()
         let sessionIDs = ExerciseSessionMetadataStore.visibleSessionIDs()
@@ -593,8 +976,12 @@ final class ExerciseGlucoseAnnouncementManager: NSObject {
                 )
                 override.date = metadata.scheduledExerciseStart ?? now
                 override.duration = 2160
-                override.percentage = settings?.basalPercentage ?? override.percentage
-                override.smbIsOff = settings?.suppressSMB ?? override.smbIsOff
+                override.percentage = metadata.guardrailBasalReenabledAt == nil
+                    ? (settings?.basalPercentage ?? override.percentage)
+                    : 100
+                override.smbIsOff = metadata.guardrailSMBReenabledAt == nil
+                    ? (settings?.suppressSMB ?? override.smbIsOff)
+                    : false
                 override.target = (settings?.target ?? override.target?.decimalValue ?? 0) as NSDecimalNumber
                 override.isUploadedToNS = false
                 metadata.actualExerciseStart = override.date
@@ -663,5 +1050,9 @@ final class ExerciseGlucoseAnnouncementManager: NSObject {
         formatter.maximumFractionDigits = maximumFractionDigits
         formatter.minimumFractionDigits = maximumFractionDigits > 0 ? 1 : 0
         return formatter.string(from: value as NSDecimalNumber) ?? "\(value)"
+    }
+
+    private func displayGlucoseValue(rawMgdl: Decimal, units: GlucoseUnits) -> Decimal {
+        units == .mgdL ? rawMgdl : rawMgdl.asMmolL
     }
 }
