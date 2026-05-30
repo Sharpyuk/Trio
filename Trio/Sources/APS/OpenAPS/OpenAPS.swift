@@ -515,6 +515,9 @@ final class OpenAPS {
             let isOverrideIndefinite = activeOverrides.first?.indefinite ?? true
             let disableSMBs = activeOverrides.first?.smbIsOff ?? false
             let overrideTargetBG = activeOverrides.first?.target?.decimalValue ?? 0
+            let effectiveExerciseSensitivityPercent = activeOverrides.first?
+                .effectivePostExerciseSensitivityPercent(at: Date()) ?? 0
+            let exerciseSensitivityMultiplier = 1 + effectiveExerciseSensitivityPercent / 100
 
             // Calculate averages for Total Daily Dose (TDD)
             let totalTDD = historicalTDDData.compactMap { ($0["total"] as? NSDecimalNumber)?.decimalValue }.reduce(0, +)
@@ -554,7 +557,8 @@ final class OpenAPS {
                 start: (activeOverrides.first?.start ?? 0) as Decimal,
                 end: (activeOverrides.first?.end ?? 0) as Decimal,
                 smbMinutes: activeOverrides.first?.smbMinutes?.decimalValue ?? maxSMBBasalMinutes,
-                uamMinutes: activeOverrides.first?.uamMinutes?.decimalValue ?? maxUAMBasalMinutes
+                uamMinutes: activeOverrides.first?.uamMinutes?.decimalValue ?? maxUAMBasalMinutes,
+                exerciseSensitivityMultiplier: exerciseSensitivityMultiplier
             )
 
             // Save and return contents of Trio's custom oref variables
@@ -968,14 +972,16 @@ extension OpenAPS {
     }
 
     func fetchActiveOverrides() throws -> [OverrideStored] {
-        try CoreDataStack.shared.fetchEntities(
+        let results = try CoreDataStack.shared.fetchEntities(
             ofType: OverrideStored.self,
             onContext: context,
             predicate: NSPredicate.lastActiveOverride,
             key: "date",
             ascending: false,
-            fetchLimit: 1
+            fetchLimit: 0
         ) as? [OverrideStored] ?? []
+
+        return results.filter { $0.isActive() }.prefix(1).map { $0 }
     }
 
     func fetchHistoricalTDDData(from date: Date) throws -> [[String: Any]] {

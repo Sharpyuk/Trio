@@ -10,6 +10,13 @@ struct TimePicker: Identifiable {
     var id: String { hours.description }
 }
 
+private enum HomeAddActionTab: String, CaseIterable, Identifiable {
+    case treatment = "Treatment"
+    case exercise = "Exercise"
+
+    var id: String { rawValue }
+}
+
 extension Home {
     struct RootView: BaseView {
         let resolver: Resolver
@@ -34,6 +41,9 @@ extension Home {
         @State var selectedTab: Int = 0
         @State var showPumpSelection: Bool = false
         @State var showCGMSelection: Bool = false
+        @State var showAddActionSheet = false
+        @State private var selectedAddActionTab: HomeAddActionTab = .treatment
+        @State var exerciseModeState = Adjustments.StateModel()
         @State var notificationsDisabled = false
         @State var timeButtons: [TimePicker] = [
             TimePicker(active: false, hours: 4),
@@ -45,7 +55,7 @@ extension Home {
         @FetchRequest(fetchRequest: OverrideStored.fetch(
             NSPredicate.lastActiveOverride,
             ascending: false,
-            fetchLimit: 1
+            fetchLimit: 0
         )) var latestOverride: FetchedResults<OverrideStored>
 
         @FetchRequest(fetchRequest: TempTargetStored.fetch(
@@ -218,7 +228,7 @@ extension Home {
         }
 
         var overrideString: String? {
-            guard let latestOverride = latestOverride.first else {
+            guard let latestOverride = latestActiveOverride else {
                 return nil
             }
 
@@ -258,7 +268,7 @@ extension Home {
                 } else {
                     /// Do not show the Override anymore
                     Task {
-                        guard let objectID = self.latestOverride.first?.objectID else { return }
+                        guard let objectID = self.latestActiveOverride?.objectID else { return }
                         await state.cancelOverride(withID: objectID)
                     }
                 }
@@ -294,6 +304,10 @@ extension Home {
             let components = [durationString, percentString, targetString, smbToggleString, smbMinuteString, uamMinuteString]
                 .filter { !$0.isEmpty }
             return components.isEmpty ? nil : components.joined(separator: ", ")
+        }
+
+        var latestActiveOverride: OverrideStored? {
+            latestOverride.first(where: { $0.isActive() })
         }
 
         var tempTargetString: String? {
@@ -572,17 +586,40 @@ extension Home {
                     .font(.title2)
                     .foregroundStyle(Color.primary, Color.purple)
                 VStack(alignment: .leading) {
-                    Text(latestOverride.first?.name ?? String(localized: "Custom Override"))
-                        .font(.subheadline)
-                        .frame(alignment: .leading)
+                    Text(
+                        latestActiveOverride?.isExerciseMode == true ? OverrideStored
+                            .exerciseOverrideName : latestActiveOverride?.name ?? String(localized: "Custom Override")
+                    )
+                    .font(.subheadline)
+                    .frame(alignment: .leading)
 
-                    Text(overrideString)
+                    Text(latestActiveOverride?.isExerciseMode == true ? exerciseOverrideSummary(overrideString) : overrideString)
                         .font(.caption)
                 }
             }
             .onTapGesture {
                 selectedTab = 2
             }
+        }
+
+        private func exerciseOverrideSummary(_ fallback: String) -> String {
+            guard let override = latestActiveOverride else {
+                return fallback
+            }
+
+            var parts = [
+                override.exerciseDisplayName,
+                fallback,
+                "basal \(Int(override.percentage))%",
+                override.smbIsOff ? String(localized: "SMB off") : String(localized: "SMB allowed")
+            ]
+
+            let sensitivity = override.effectivePostExerciseSensitivityPercent()
+            if sensitivity > 0 {
+                parts.append("sensitivity +\(Int(truncating: NSDecimalNumber(decimal: sensitivity)))%")
+            }
+
+            return parts.joined(separator: ", ")
         }
 
         @ViewBuilder func adjustmentsTempTargetView(_ tempTargetString: String) -> some View {
@@ -638,13 +675,13 @@ extension Home {
             Image(systemName: "xmark.app")
                 .font(.title)
                 .confirmationDialog(
-                    "Stop the Override \"\(latestOverride.first?.name ?? "")\"?",
+                    "Stop the Override \"\(latestActiveOverride?.name ?? "")\"?",
                     isPresented: $isConfirmStopOverridePresented,
                     titleVisibility: .visible
                 ) {
                     Button("Stop", role: .destructive) {
                         Task {
-                            guard let objectID = latestOverride.first?.objectID else { return }
+                            guard let objectID = latestActiveOverride?.objectID else { return }
                             await state.cancelOverride(withID: objectID)
                         }
                     }
@@ -652,7 +689,7 @@ extension Home {
                 }
                 .padding(.trailing, 8)
                 .onTapGesture {
-                    if !latestOverride.isEmpty {
+                    if latestActiveOverride != nil {
                         isConfirmStopOverridePresented = true
                     }
                 }
@@ -722,9 +759,9 @@ extension Home {
                             Spacer()
 
                             adjustmentsCancelView({
-                                if !latestTempTarget.isEmpty, !latestOverride.isEmpty {
+                                if !latestTempTarget.isEmpty, latestActiveOverride != nil {
                                     showCancelConfirmDialog = true
-                                } else if !latestOverride.isEmpty {
+                                } else if latestActiveOverride != nil {
                                     showCancelAlert = true
                                 } else if !latestTempTarget.isEmpty {
                                     showCancelAlert = true
@@ -749,7 +786,7 @@ extension Home {
                     .confirmationDialog("Adjustment to Stop", isPresented: $showCancelConfirmDialog) {
                         Button("Stop Override", role: .destructive) {
                             Task {
-                                guard let objectID = latestOverride.first?.objectID else { return }
+                                guard let objectID = latestActiveOverride?.objectID else { return }
                                 await state.cancelOverride(withID: objectID)
                             }
                         }
@@ -761,7 +798,7 @@ extension Home {
                         }
                         Button("Stop All Adjustments", role: .destructive) {
                             Task {
-                                guard let overrideObjectID = latestOverride.first?.objectID else { return }
+                                guard let overrideObjectID = latestActiveOverride?.objectID else { return }
                                 await state.cancelOverride(withID: overrideObjectID)
 
                                 guard let tempTargetObjectID = latestTempTarget.first?.objectID else { return }
@@ -1106,17 +1143,16 @@ extension Home {
                 }
                 .tint(Color.tabBar)
 
-                Button(
-                    action: {
-                        state.showModal(for: .treatmentView) },
-                    label: {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 40))
-                            .foregroundStyle(Color.tabBar)
-                            .padding(.vertical, 2)
-                            .padding(.horizontal, 24)
-                    }
-                )
+                Button {
+                    selectedAddActionTab = .treatment
+                    showAddActionSheet = true
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 40))
+                        .foregroundStyle(Color.tabBar)
+                        .padding(.vertical, 2)
+                        .padding(.horizontal, 24)
+                }
             }.ignoresSafeArea(.keyboard, edges: .bottom).blur(radius: state.waitForSuggestion ? 8 : 0)
                 .onChange(of: selectedTab) {
                     if !settingsPath.isEmpty {
@@ -1133,7 +1169,55 @@ extension Home {
                     CustomProgressView(text: String(localized: "Updating IOB...", comment: "Progress text when updating IOB"))
                 }
             }
+            .sheet(isPresented: $showAddActionSheet, onDismiss: {
+                Task {
+                    await exerciseModeState.resetExerciseModeState()
+                }
+            }) {
+                HomeAddActionSheet(
+                    resolver: resolver,
+                    selectedTab: $selectedAddActionTab,
+                    exerciseModeState: exerciseModeState
+                )
+            }
         }
+    }
+}
+
+private struct HomeAddActionSheet: View {
+    let resolver: Resolver
+    @Binding var selectedTab: HomeAddActionTab
+    @Bindable var exerciseModeState: Adjustments.StateModel
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Picker("Add", selection: $selectedTab) {
+                ForEach(HomeAddActionTab.allCases) { tab in
+                    Text(tab.rawValue).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding()
+
+            switch selectedTab {
+            case .treatment:
+                Treatments.RootView(resolver: resolver)
+            case .exercise:
+                ExerciseModeForm(state: exerciseModeState)
+            }
+        }
+        .onAppear {
+            configureExerciseStateIfNeeded()
+        }
+        .onChange(of: selectedTab) {
+            configureExerciseStateIfNeeded()
+        }
+    }
+
+    private func configureExerciseStateIfNeeded() {
+        guard exerciseModeState.isInitial else { return }
+        exerciseModeState.resolver = resolver
+        exerciseModeState.isInitial = false
     }
 }
 

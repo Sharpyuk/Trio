@@ -6,10 +6,46 @@ extension Adjustments.RootView {
         if state.isOverrideEnabled, state.activeOverrideName.isNotEmpty {
             currentActiveAdjustment
         }
+        if state.scheduledExerciseOverrides.isNotEmpty {
+            scheduledExerciseModes
+        }
         if state.overridePresets.isNotEmpty {
             overridePresets
         } else {
             defaultText
+        }
+    }
+
+    var scheduledExerciseModes: some View {
+        Section {
+            ForEach(state.scheduledExerciseOverrides) { exerciseOverride in
+                let startsIn = exerciseOverride.date?.timeIntervalSinceNow ?? 0
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(exerciseOverride.exerciseTypeName ?? OverrideStored.exerciseOverrideName)
+                        Text("Starts in \(formattedTimeRemaining(startsIn))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        if let phase = exerciseOverride.exercisePhase {
+                            Text(phase.title)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Spacer()
+                    Button(role: .destructive) {
+                        Task {
+                            await state.cancelScheduledExerciseOverride(exerciseOverride.objectID)
+                        }
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                    }
+                    .buttonStyle(.borderless)
+                }
+            }
+            .listRowBackground(Color.chart)
+        } header: {
+            Text("Scheduled Exercise")
         }
     }
 

@@ -3,6 +3,119 @@ import CoreData
 import Foundation
 import SwiftUI
 
+struct ExerciseReport: Codable, Identifiable {
+    struct PhaseConfiguration: Codable {
+        let basalPercentage: Double
+        let target: Decimal?
+        let smbSuppressed: Bool
+    }
+
+    struct GlucoseStats: Codable {
+        let bgAtPreExerciseStart: Int?
+        let bgAtExerciseStart: Int?
+        let bgAtExerciseEnd: Int?
+        let bgAtRecoveryEnd: Int?
+        let minBGDuringExercise: Int?
+        let maxBGDuringExercise: Int?
+        let averageBGDuringExercise: Decimal?
+        let glucoseTrendBeforeExercise: Decimal?
+        let glucoseTrendAfterExercise: Decimal?
+    }
+
+    struct InsulinStats: Codable {
+        let iobAtPreExerciseStart: Decimal?
+        let iobAtExerciseStart: Decimal?
+        let iobAtExerciseEnd: Decimal?
+        let iobAtRecoveryEnd: Decimal?
+        let basalDeliveredDuringPreExercise: Decimal?
+        let basalDeliveredDuringExercise: Decimal?
+        let basalDeliveredDuringRecovery: Decimal?
+        let preExerciseSMBSuppressed: Bool
+        let exerciseSMBSuppressed: Bool
+        let recoverySMBSuppressed: Bool
+        let bolusesDeliveredDuringSession: Decimal?
+    }
+
+    let id: String
+    let createdAt: Date
+    let exerciseType: String
+    let customExerciseTypeName: String?
+    let preExerciseStartTime: Date?
+    let exerciseStartTime: Date
+    let exerciseStopTime: Date
+    let actualExerciseDurationMinutes: Decimal
+    let startedAutomatically: Bool
+    let startedEarly: Bool
+    let wasCancelled: Bool
+    let recoveryDurationCalculatedMinutes: Int
+    let recoverySensitivityAdjustmentCalculated: Decimal
+    let decayModelUsed: ExerciseSensitivityDecayType
+    let preExerciseConfiguration: PhaseConfiguration?
+    let exerciseConfiguration: PhaseConfiguration
+    let recoveryConfiguration: PhaseConfiguration?
+    let glucoseStats: GlucoseStats
+    let insulinStats: InsulinStats
+}
+
+enum ExerciseReportStore {
+    static var reportsDirectory: URL {
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        return documents.appendingPathComponent("ExerciseReports", isDirectory: true)
+    }
+
+    static func save(_ report: ExerciseReport) throws -> URL {
+        try FileManager.default.createDirectory(at: reportsDirectory, withIntermediateDirectories: true)
+        let url = reportsDirectory.appendingPathComponent("exercise-report-\(report.id).json")
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(report).write(to: url, options: .atomic)
+        return url
+    }
+
+    static func loadReports() -> [ExerciseReport] {
+        let urls = (try? FileManager.default.contentsOfDirectory(
+            at: reportsDirectory,
+            includingPropertiesForKeys: nil
+        )) ?? []
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return urls
+            .filter { $0.pathExtension == "json" }
+            .compactMap { try? Data(contentsOf: $0) }
+            .compactMap { try? decoder.decode(ExerciseReport.self, from: $0) }
+            .sorted { $0.exerciseStopTime > $1.exerciseStopTime }
+    }
+
+    static func exportURL(for report: ExerciseReport) throws -> URL {
+        try save(report)
+    }
+
+    static func csvURL(for report: ExerciseReport) throws -> URL {
+        try FileManager.default.createDirectory(at: reportsDirectory, withIntermediateDirectories: true)
+        let url = reportsDirectory.appendingPathComponent("exercise-report-\(report.id).csv")
+        let rows = [
+            ["field", "value"],
+            ["exerciseType", report.exerciseType],
+            ["preExerciseStartTime", report.preExerciseStartTime?.ISO8601Format() ?? ""],
+            ["exerciseStartTime", report.exerciseStartTime.ISO8601Format()],
+            ["exerciseStopTime", report.exerciseStopTime.ISO8601Format()],
+            ["actualExerciseDurationMinutes", "\(report.actualExerciseDurationMinutes)"],
+            ["recoveryDurationCalculatedMinutes", "\(report.recoveryDurationCalculatedMinutes)"],
+            ["recoverySensitivityAdjustmentCalculated", "\(report.recoverySensitivityAdjustmentCalculated)"],
+            ["decayModelUsed", report.decayModelUsed.title]
+        ]
+        let csv = rows.map { $0.map(csvEscape).joined(separator: ",") }.joined(separator: "\n")
+        try csv.write(to: url, atomically: true, encoding: .utf8)
+        return url
+    }
+
+    private static func csvEscape(_ value: String) -> String {
+        let escaped = value.replacingOccurrences(of: "\"", with: "\"\"")
+        return "\"\(escaped)\""
+    }
+}
+
 extension Adjustments.StateModel {
     // MARK: - Enact Overrides
 
@@ -171,6 +284,144 @@ extension Adjustments.StateModel {
         }
     }
 
+    func saveExerciseMode() async {
+        do {
+            let now = Date()
+            let sessionStart = exerciseStartDate <= now.addingTimeInterval(60) ? now : exerciseStartDate
+            let sessionID = UUID().uuidString
+            let exerciseTypeName = resolvedExerciseTypeName
+
+            var phaseOverrides: [Override] = []
+            let activeExerciseStart: Date
+
+            if preExerciseEnabled, preExerciseDuration > 0 {
+                activeExerciseStart = sessionStart.addingTimeInterval(
+                    TimeInterval(NSDecimalNumber(decimal: preExerciseDuration).doubleValue * 60)
+                )
+                phaseOverrides.append(exerciseOverride(
+                    sessionID: sessionID,
+                    exerciseTypeName: exerciseTypeName,
+                    phase: .preExercise,
+                    startDate: sessionStart,
+                    duration: preExerciseDuration,
+                    basalPercentage: preExerciseBasalPercentage,
+                    suppressSMB: preExerciseSuppressSMB,
+                    target: preExerciseTarget
+                ))
+            } else {
+                activeExerciseStart = sessionStart
+            }
+
+            phaseOverrides.append(exerciseOverride(
+                sessionID: sessionID,
+                exerciseTypeName: exerciseTypeName,
+                phase: .duringExercise,
+                startDate: activeExerciseStart,
+                duration: 2160,
+                basalPercentage: exerciseBasalPercentage,
+                suppressSMB: exerciseSuppressSMB,
+                target: exerciseTarget
+            ))
+
+            if phaseOverrides.contains(where: { $0.date <= now.addingTimeInterval(60) }) {
+                await disableAllActiveOverrides(createOverrideRunEntry: true)
+            }
+
+            for phaseOverride in phaseOverrides {
+                try await overrideStorage.storeOverride(override: phaseOverride)
+            }
+
+            await resetExerciseModeState()
+            setupScheduledExerciseOverridesArray()
+            updateLatestOverrideConfiguration()
+        } catch {
+            debug(
+                .default,
+                "\(DebuggingIdentifiers.failed) Failed to save exercise mode: \(error)"
+            )
+        }
+    }
+
+    @MainActor func startExerciseNow(_ objectID: NSManagedObjectID) async {
+        do {
+            guard let preExerciseOverride = try viewContext.existingObject(with: objectID) as? OverrideStored,
+                  preExerciseOverride.exercisePhase == .preExercise,
+                  let sessionID = preExerciseOverride.id
+            else {
+                return
+            }
+
+            let now = Date()
+            if let preStartedAt = preExerciseOverride.date {
+                preExerciseOverride.duration = Decimal(max(1, now.timeIntervalSince(preStartedAt) / 60)) as NSDecimalNumber
+            }
+            preExerciseOverride.isUploadedToNS = false
+
+            let fetchRequest: NSFetchRequest<OverrideStored> = OverrideStored.fetchRequest()
+            fetchRequest.predicate = NSPredicate(format: "id == %@", sessionID)
+            let sessionOverrides = try viewContext.fetch(fetchRequest)
+
+            for sessionOverride in sessionOverrides where sessionOverride.exercisePhase == .duringExercise {
+                sessionOverride.date = now
+                sessionOverride.isUploadedToNS = false
+            }
+
+            guard viewContext.hasChanges else { return }
+            try viewContext.save()
+            setupScheduledExerciseOverridesArray()
+            updateLatestOverrideConfiguration()
+        } catch {
+            debugPrint(
+                "\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to start Exercise Override early: \(error)"
+            )
+        }
+    }
+
+    private var resolvedExerciseTypeName: String {
+        if exerciseType == .custom {
+            let customName = customExerciseTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+            return customName.isEmpty ? ExerciseType.custom.rawValue : customName
+        }
+
+        return exerciseType.rawValue
+    }
+
+    private func exerciseOverride(
+        sessionID: String,
+        exerciseTypeName: String,
+        phase: ExercisePhase,
+        startDate: Date,
+        duration: Decimal,
+        basalPercentage: Double,
+        suppressSMB: Bool,
+        target: Decimal,
+        sensitivityPercent: Decimal = 0,
+        decayType: ExerciseSensitivityDecayType = .flat
+    ) -> Override {
+        Override(
+            name: OverrideStored.exerciseOverrideName(type: exerciseTypeName, phase: phase),
+            enabled: true,
+            date: startDate,
+            duration: duration,
+            indefinite: false,
+            percentage: basalPercentage,
+            smbIsOff: suppressSMB,
+            isPreset: false,
+            id: sessionID,
+            overrideTarget: true,
+            target: target,
+            advancedSettings: phase == .duringExercise ? postExerciseEnabled : false,
+            isfAndCr: phase == .duringExercise ? postExerciseSuppressSMB : false,
+            isf: false,
+            cr: false,
+            smbIsScheduledOff: false,
+            start: phase == .duringExercise ? Decimal(postExerciseBasalPercentage) : sensitivityPercent,
+            end: phase == .duringExercise ? postExerciseTarget : Decimal(decayType.rawValue),
+            smbMinutes: defaultSmbMinutes,
+            uamMinutes: defaultUamMinutes
+        )
+    }
+
     // MARK: - Override Preset Management
 
     /// Sets up the array of Override Presets for UI display.
@@ -188,6 +439,20 @@ extension Adjustments.StateModel {
         }
     }
 
+    func setupScheduledExerciseOverridesArray() {
+        Task {
+            do {
+                let ids = try await overrideStorage.fetchScheduledExerciseOverrides()
+                await updateScheduledExerciseOverridesArray(with: ids)
+            } catch {
+                debug(
+                    .default,
+                    "\(DebuggingIdentifiers.failed) Failed to setup scheduled exercise overrides: \(error)"
+                )
+            }
+        }
+    }
+
     /// Updates the array of Override Presets from Core Data.
     @MainActor private func updateOverridePresetsArray(with IDs: [NSManagedObjectID]) async {
         do {
@@ -200,6 +465,299 @@ extension Adjustments.StateModel {
                 "\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to extract Overrides: \(error)"
             )
         }
+    }
+
+    @MainActor private func updateScheduledExerciseOverridesArray(with IDs: [NSManagedObjectID]) async {
+        do {
+            scheduledExerciseOverrides = try IDs.compactMap { id in
+                try viewContext.existingObject(with: id) as? OverrideStored
+            }
+        } catch {
+            debugPrint(
+                "\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to extract scheduled Exercise Modes: \(error)"
+            )
+        }
+    }
+
+    @MainActor func cancelScheduledExerciseOverride(_ objectID: NSManagedObjectID) async {
+        do {
+            guard let exerciseOverride = try viewContext.existingObject(with: objectID) as? OverrideStored else {
+                return
+            }
+
+            let sessionID = exerciseOverride.id
+            let fetchRequest: NSFetchRequest<OverrideStored> = OverrideStored.fetchRequest()
+            if let sessionID {
+                fetchRequest.predicate = NSPredicate(format: "id == %@", sessionID)
+            } else {
+                fetchRequest.predicate = NSPredicate(format: "self == %@", exerciseOverride)
+            }
+
+            let sessionOverrides = try viewContext.fetch(fetchRequest)
+            for sessionOverride in sessionOverrides {
+                sessionOverride.enabled = false
+                sessionOverride.isUploadedToNS = false
+            }
+
+            guard viewContext.hasChanges else { return }
+            try viewContext.save()
+            setupScheduledExerciseOverridesArray()
+            updateLatestOverrideConfiguration()
+        } catch {
+            debugPrint(
+                "\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to cancel scheduled Exercise Mode: \(error)"
+            )
+        }
+    }
+
+    @MainActor func stopExerciseNow(_ objectID: NSManagedObjectID) async {
+        do {
+            guard let exerciseOverride = try viewContext.existingObject(with: objectID) as? OverrideStored,
+                  exerciseOverride.exercisePhase == .duringExercise,
+                  let sessionID = exerciseOverride.id
+            else {
+                return
+            }
+
+            let now = Date()
+            let exerciseStartedAt = exerciseOverride.date ?? now
+            let actualDurationMinutes = max(0, now.timeIntervalSince(exerciseStartedAt) / 60)
+            exerciseOverride.duration = Decimal(max(1, actualDurationMinutes)) as NSDecimalNumber
+
+            let fetchRequest: NSFetchRequest<OverrideStored> = OverrideStored.fetchRequest()
+            fetchRequest.predicate = NSPredicate(format: "id == %@", sessionID)
+            let sessionOverrides = try viewContext.fetch(fetchRequest)
+
+            for sessionOverride in sessionOverrides where sessionOverride.exercisePhase == .postExercise {
+                sessionOverride.enabled = false
+                sessionOverride.isUploadedToNS = false
+            }
+            exerciseOverride.isUploadedToNS = false
+
+            let shouldCreateRecovery = exerciseOverride.advancedSettings
+            let recoveryBasalPercentage = exerciseOverride.start?.doubleValue ?? postExerciseBasalPercentage
+            let recoveryTarget = exerciseOverride.end?.decimalValue ?? postExerciseTarget
+            let recoverySuppressSMB = exerciseOverride.isfAndCr
+
+            let recoveryRecommendation = shouldCreateRecovery
+                ? ExerciseRecoveryCalculator.recommendation(forExerciseDurationMinutes: actualDurationMinutes)
+                : ExerciseRecoveryRecommendation(durationMinutes: 0, sensitivityPercent: 0, decayType: .linear)
+
+            if recoveryRecommendation.hasRecoveryEffect {
+                let recoveryOverride = self.exerciseOverride(
+                    sessionID: sessionID,
+                    exerciseTypeName: exerciseOverride.exerciseTypeName ?? resolvedExerciseTypeName,
+                    phase: .postExercise,
+                    startDate: now,
+                    duration: Decimal(recoveryRecommendation.durationMinutes),
+                    basalPercentage: recoveryBasalPercentage,
+                    suppressSMB: recoverySuppressSMB,
+                    target: recoveryTarget,
+                    sensitivityPercent: recoveryRecommendation.sensitivityPercent,
+                    decayType: recoveryRecommendation.decayType
+                )
+                try await overrideStorage.storeOverride(override: recoveryOverride)
+            }
+
+            try? createExerciseReport(
+                sessionID: sessionID,
+                sessionOverrides: sessionOverrides,
+                exerciseOverride: exerciseOverride,
+                stopTime: now,
+                recoveryRecommendation: recoveryRecommendation
+            )
+
+            guard viewContext.hasChanges else {
+                setupScheduledExerciseOverridesArray()
+                updateLatestOverrideConfiguration()
+                return
+            }
+            try viewContext.save()
+            setupScheduledExerciseOverridesArray()
+            updateLatestOverrideConfiguration()
+        } catch {
+            debugPrint(
+                "\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to stop Exercise Override: \(error)"
+            )
+        }
+    }
+
+    @MainActor private func createExerciseReport(
+        sessionID: String,
+        sessionOverrides: [OverrideStored],
+        exerciseOverride: OverrideStored,
+        stopTime: Date,
+        recoveryRecommendation: ExerciseRecoveryRecommendation
+    ) throws {
+        let preOverride = sessionOverrides.first { $0.exercisePhase == .preExercise }
+        let exerciseStart = exerciseOverride.date ?? stopTime
+        let preStart = preOverride?.date
+        let actualDurationMinutes = Decimal(max(0, stopTime.timeIntervalSince(exerciseStart) / 60))
+        let exerciseTypeName = exerciseOverride.exerciseTypeName ?? resolvedExerciseTypeName
+
+        let glucoseStats = exerciseGlucoseStats(
+            preStart: preStart,
+            exerciseStart: exerciseStart,
+            exerciseEnd: stopTime,
+            recoveryEnd: recoveryRecommendation.hasRecoveryEffect
+                ? stopTime.addingTimeInterval(TimeInterval(recoveryRecommendation.durationMinutes * 60))
+                : nil
+        )
+        let insulinStats = exerciseInsulinStats(
+            preStart: preStart,
+            exerciseStart: exerciseStart,
+            exerciseEnd: stopTime,
+            recoveryEnd: recoveryRecommendation.hasRecoveryEffect
+                ? stopTime.addingTimeInterval(TimeInterval(recoveryRecommendation.durationMinutes * 60))
+                : nil,
+            preOverride: preOverride,
+            exerciseOverride: exerciseOverride
+        )
+        let shouldCreateRecovery = exerciseOverride.advancedSettings
+        let recoveryBasalPercentage = exerciseOverride.start?.doubleValue ?? postExerciseBasalPercentage
+        let recoveryTarget = exerciseOverride.end?.decimalValue ?? postExerciseTarget
+        let recoverySuppressSMB = exerciseOverride.isfAndCr
+
+        let report = ExerciseReport(
+            id: sessionID,
+            createdAt: Date(),
+            exerciseType: exerciseTypeName,
+            customExerciseTypeName: exerciseType == .custom ? customExerciseTypeName : nil,
+            preExerciseStartTime: preStart,
+            exerciseStartTime: exerciseStart,
+            exerciseStopTime: stopTime,
+            actualExerciseDurationMinutes: actualDurationMinutes,
+            startedAutomatically: preOverride?.activeUntilDate() == exerciseStart,
+            startedEarly: preOverride?.activeUntilDate() != nil && preOverride?.activeUntilDate() != exerciseStart,
+            wasCancelled: actualDurationMinutes < 10,
+            recoveryDurationCalculatedMinutes: recoveryRecommendation.durationMinutes,
+            recoverySensitivityAdjustmentCalculated: recoveryRecommendation.sensitivityPercent,
+            decayModelUsed: recoveryRecommendation.decayType,
+            preExerciseConfiguration: preOverride.map {
+                ExerciseReport.PhaseConfiguration(
+                    basalPercentage: $0.percentage,
+                    target: $0.target?.decimalValue,
+                    smbSuppressed: $0.smbIsOff
+                )
+            },
+            exerciseConfiguration: ExerciseReport.PhaseConfiguration(
+                basalPercentage: exerciseOverride.percentage,
+                target: exerciseOverride.target?.decimalValue,
+                smbSuppressed: exerciseOverride.smbIsOff
+            ),
+            recoveryConfiguration: shouldCreateRecovery ? ExerciseReport.PhaseConfiguration(
+                basalPercentage: recoveryBasalPercentage,
+                target: recoveryTarget,
+                smbSuppressed: recoverySuppressSMB
+            ) : nil,
+            glucoseStats: glucoseStats,
+            insulinStats: insulinStats
+        )
+
+        _ = try ExerciseReportStore.save(report)
+    }
+
+    @MainActor private func exerciseGlucoseStats(
+        preStart: Date?,
+        exerciseStart: Date,
+        exerciseEnd: Date,
+        recoveryEnd: Date?
+    ) -> ExerciseReport.GlucoseStats {
+        let exerciseReadings = glucoseReadings(from: exerciseStart, to: exerciseEnd)
+        let values = exerciseReadings.map { Int($0.glucose) }
+        let average = values.isEmpty ? nil : Decimal(values.reduce(0, +)) / Decimal(values.count)
+
+        return ExerciseReport.GlucoseStats(
+            bgAtPreExerciseStart: preStart.flatMap { nearestGlucose(to: $0).map { Int($0.glucose) } },
+            bgAtExerciseStart: nearestGlucose(to: exerciseStart).map { Int($0.glucose) },
+            bgAtExerciseEnd: nearestGlucose(to: exerciseEnd).map { Int($0.glucose) },
+            bgAtRecoveryEnd: recoveryEnd.flatMap { nearestGlucose(to: $0).map { Int($0.glucose) } },
+            minBGDuringExercise: values.min(),
+            maxBGDuringExercise: values.max(),
+            averageBGDuringExercise: average,
+            glucoseTrendBeforeExercise: glucoseTrend(endingAt: exerciseStart),
+            glucoseTrendAfterExercise: glucoseTrend(startingAt: exerciseEnd)
+        )
+    }
+
+    @MainActor private func exerciseInsulinStats(
+        preStart: Date?,
+        exerciseStart: Date,
+        exerciseEnd: Date,
+        recoveryEnd: Date?,
+        preOverride: OverrideStored?,
+        exerciseOverride: OverrideStored
+    ) -> ExerciseReport.InsulinStats {
+        let determinations = determinations(from: preStart ?? exerciseStart, to: recoveryEnd ?? exerciseEnd)
+        let boluses = determinations.compactMap { $0.smbToDeliver?.decimalValue }
+        let totalBoluses = boluses.isEmpty ? nil : boluses.reduce(0, +)
+
+        return ExerciseReport.InsulinStats(
+            iobAtPreExerciseStart: preStart.flatMap { nearestDetermination(to: $0)?.iob?.decimalValue },
+            iobAtExerciseStart: nearestDetermination(to: exerciseStart)?.iob?.decimalValue,
+            iobAtExerciseEnd: nearestDetermination(to: exerciseEnd)?.iob?.decimalValue,
+            iobAtRecoveryEnd: recoveryEnd.flatMap { nearestDetermination(to: $0)?.iob?.decimalValue },
+            basalDeliveredDuringPreExercise: nil,
+            basalDeliveredDuringExercise: nil,
+            basalDeliveredDuringRecovery: nil,
+            preExerciseSMBSuppressed: preOverride?.smbIsOff ?? false,
+            exerciseSMBSuppressed: exerciseOverride.smbIsOff,
+            recoverySMBSuppressed: exerciseOverride.isfAndCr,
+            bolusesDeliveredDuringSession: totalBoluses
+        )
+    }
+
+    @MainActor private func nearestGlucose(to date: Date) -> GlucoseStored? {
+        let request = GlucoseStored.fetchRequest()
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \GlucoseStored.date, ascending: false)]
+        request.predicate = NSPredicate(
+            format: "date >= %@ AND date <= %@",
+            date.addingTimeInterval(-15 * 60) as NSDate,
+            date.addingTimeInterval(15 * 60) as NSDate
+        )
+        return try? viewContext.fetch(request).min {
+            abs(($0.date ?? .distantPast).timeIntervalSince(date)) < abs(($1.date ?? .distantPast).timeIntervalSince(date))
+        }
+    }
+
+    @MainActor private func glucoseReadings(from start: Date, to end: Date) -> [GlucoseStored] {
+        let request = GlucoseStored.fetchRequest()
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \GlucoseStored.date, ascending: true)]
+        request.predicate = NSPredicate(format: "date >= %@ AND date <= %@", start as NSDate, end as NSDate)
+        return (try? viewContext.fetch(request)) ?? []
+    }
+
+    @MainActor private func nearestDetermination(to date: Date) -> OrefDetermination? {
+        let request = OrefDetermination.fetchRequest()
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \OrefDetermination.deliverAt, ascending: false)]
+        request.predicate = NSPredicate(
+            format: "deliverAt >= %@ AND deliverAt <= %@",
+            date.addingTimeInterval(-20 * 60) as NSDate,
+            date.addingTimeInterval(20 * 60) as NSDate
+        )
+        return try? viewContext.fetch(request).min {
+            abs(($0.deliverAt ?? .distantPast).timeIntervalSince(date)) <
+                abs(($1.deliverAt ?? .distantPast).timeIntervalSince(date))
+        }
+    }
+
+    @MainActor private func determinations(from start: Date, to end: Date) -> [OrefDetermination] {
+        let request = OrefDetermination.fetchRequest()
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \OrefDetermination.deliverAt, ascending: true)]
+        request.predicate = NSPredicate(format: "deliverAt >= %@ AND deliverAt <= %@", start as NSDate, end as NSDate)
+        return (try? viewContext.fetch(request)) ?? []
+    }
+
+    @MainActor private func glucoseTrend(endingAt date: Date) -> Decimal? {
+        let readings = glucoseReadings(from: date.addingTimeInterval(-30 * 60), to: date)
+        guard let first = readings.first, let last = readings.last, first.date != last.date else { return nil }
+        return Decimal(Int(last.glucose) - Int(first.glucose))
+    }
+
+    @MainActor private func glucoseTrend(startingAt date: Date) -> Decimal? {
+        let readings = glucoseReadings(from: date, to: date.addingTimeInterval(30 * 60))
+        guard let first = readings.first, let last = readings.last, first.date != last.date else { return nil }
+        return Decimal(Int(last.glucose) - Int(first.glucose))
     }
 
     /// Deletes an Override Preset and updates the view.
@@ -324,6 +882,25 @@ extension Adjustments.StateModel {
         smbMinutes = defaultSmbMinutes
         uamMinutes = defaultUamMinutes
         target = currentGlucoseTarget
+    }
+
+    @MainActor func resetExerciseModeState() async {
+        exerciseStartDate = Date()
+        exerciseType = .run
+        customExerciseTypeName = ""
+        preExerciseEnabled = true
+        preExerciseDuration = 60
+        preExerciseTarget = 108
+        preExerciseBasalPercentage = 0
+        preExerciseSuppressSMB = true
+        exerciseTarget = 108
+        exerciseBasalPercentage = 50
+        exerciseSuppressSMB = true
+        postExerciseEnabled = true
+        postExerciseTarget = 108
+        postExerciseBasalPercentage = 100
+        postExerciseSuppressSMB = false
+        postExerciseSensitivityDecayType = .linear
     }
 
     /// Rounds a target value to the nearest step.

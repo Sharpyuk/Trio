@@ -44,6 +44,7 @@ extension Adjustments {
         var selectedTab: Tab = .overrides
         var activeOverrideName: String = ""
         var currentActiveOverride: OverrideStored?
+        var scheduledExerciseOverrides: [OverrideStored] = []
         var activeTempTargetName: String = ""
 
         var currentActiveTempTarget: TempTargetStored?
@@ -69,6 +70,28 @@ extension Adjustments {
         var lowTTlowersSens: Bool = false
         var didSaveSettings: Bool = false
 
+        // Exercise Mode Properties
+        var exerciseStartDate = Date()
+        var exerciseType: ExerciseType = .run
+        var customExerciseTypeName = ""
+        var exerciseHasPlannedDuration = true
+        var exerciseDuration: Decimal = 120
+        var preExerciseEnabled = true
+        var preExerciseDuration: Decimal = 60
+        var preExerciseTarget: Decimal = 108
+        var preExerciseBasalPercentage: Double = 0
+        var preExerciseSuppressSMB: Bool = true
+        var exerciseTarget: Decimal = 108
+        var exerciseBasalPercentage: Double = 50
+        var exerciseSuppressSMB: Bool = true
+        var postExerciseEnabled = true
+        var postExerciseDuration: Decimal = 480
+        var postExerciseTarget: Decimal = 108
+        var postExerciseBasalPercentage: Double = 100
+        var postExerciseSuppressSMB: Bool = false
+        var postExerciseSensitivityStartPercent: Decimal = 20
+        var postExerciseSensitivityDecayType: ExerciseSensitivityDecayType = .linear
+
         // Core Data
         let coredataContext = CoreDataStack.shared.newTaskContext()
         let viewContext = CoreDataStack.shared.persistentContainer.viewContext
@@ -92,6 +115,7 @@ extension Adjustments {
             Task {
                 await withTaskGroup(of: Void.self) { group in
                     group.addTask { self.setupOverridePresetsArray() }
+                    group.addTask { self.setupScheduledExerciseOverridesArray() }
                     group.addTask { self.setupTempTargetPresetsArray() }
                     group.addTask { self.updateLatestOverrideConfiguration() }
                     group.addTask { self.updateLatestTempTargetConfiguration() }
@@ -233,6 +257,7 @@ extension Adjustments.StateModel {
             .sink { [weak self] _ in
                 guard let self = self else { return }
                 self.updateLatestOverrideConfiguration()
+                self.setupScheduledExerciseOverridesArray()
             }
             .store(in: &cancellables)
 
@@ -248,6 +273,7 @@ extension Adjustments.StateModel {
     /// Handles Override configuration updates.
     @objc private func handleOverrideConfigurationUpdate() {
         updateLatestOverrideConfiguration()
+        setupScheduledExerciseOverridesArray()
     }
 
     /// Handles Temp Target configuration updates.

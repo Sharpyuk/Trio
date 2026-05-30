@@ -152,6 +152,7 @@ var determine_basal = function determine_basal(glucose_status, currenttemp, iob_
     const cr_ = trio_custom_variables.cr;
     const smbMinutes = trio_custom_variables.smbMinutes;
     const uamMinutes = trio_custom_variables.uamMinutes;
+    const exerciseSensitivityMultiplier = trio_custom_variables.exerciseSensitivityMultiplier || 1;
     // tdd past 24 hour
     let tdd = trio_custom_variables.currentTDD;
     var logOutPut = "";
@@ -642,6 +643,12 @@ var determine_basal = function determine_basal(glucose_status, currenttemp, iob_
         //process.stderr.write(" (autosens ratio "+sensitivityRatio+")");
         isfreason += "Autosens ratio: " + round(sensitivityRatio, 2) + ", ISF: " + convert_bg(sensitivity,profile) + "\u2192" + convert_bg(sens,profile);
 
+    }
+    if (exerciseSensitivityMultiplier > 1) {
+        var exerciseAdjustedSens = round(sens * exerciseSensitivityMultiplier, 1);
+        process.stderr.write("; Exercise recovery sensitivity +" + round((exerciseSensitivityMultiplier - 1) * 100, 0) + "%, ISF: " + convert_bg(sens, profile) + "\u2192" + convert_bg(exerciseAdjustedSens, profile));
+        isfreason += ", Exercise recovery sensitivity +" + round((exerciseSensitivityMultiplier - 1) * 100, 0) + "%, ISF: " + convert_bg(sens, profile) + "\u2192" + convert_bg(exerciseAdjustedSens, profile);
+        sens = exerciseAdjustedSens;
     }
     console.error("CR:" + carbRatio);
 

@@ -31,7 +31,7 @@ extension Home.StateModel {
             guard let fetchedResults = results as? [OverrideStored] else {
                 throw CoreDataError.fetchError(function: #function, file: #file)
             }
-            return fetchedResults.map(\.objectID)
+            return fetchedResults.filter { $0.isActive() }.map(\.objectID)
         }
     }
 
@@ -82,7 +82,17 @@ extension Home.StateModel {
         do {
             guard let profileToCancel = try viewContext.existingObject(with: id) as? OverrideStored else { return }
 
-            profileToCancel.enabled = false
+            if profileToCancel.isExerciseMode, let sessionID = profileToCancel.id {
+                let fetchRequest: NSFetchRequest<OverrideStored> = OverrideStored.fetchRequest()
+                fetchRequest.predicate = NSPredicate(format: "id == %@", sessionID)
+                let sessionOverrides = try viewContext.fetch(fetchRequest)
+                for sessionOverride in sessionOverrides {
+                    sessionOverride.enabled = false
+                    sessionOverride.isUploadedToNS = false
+                }
+            } else {
+                profileToCancel.enabled = false
+            }
 
             guard viewContext.hasChanges else { return }
             try viewContext.save()

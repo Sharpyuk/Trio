@@ -21,6 +21,7 @@ struct TrioCustomOrefVariables: JSON, Equatable {
     var end: Decimal
     var smbMinutes: Decimal
     var uamMinutes: Decimal
+    var exerciseSensitivityMultiplier: Decimal
 
     init(
         average_total_data: Decimal,
@@ -43,6 +44,7 @@ struct TrioCustomOrefVariables: JSON, Equatable {
         end: Decimal,
         smbMinutes: Decimal,
         uamMinutes: Decimal,
+        exerciseSensitivityMultiplier: Decimal = 1,
     ) {
         self.average_total_data = average_total_data
         self.weightedAverage = weightedAverage
@@ -64,6 +66,7 @@ struct TrioCustomOrefVariables: JSON, Equatable {
         self.end = end
         self.smbMinutes = smbMinutes
         self.uamMinutes = uamMinutes
+        self.exerciseSensitivityMultiplier = exerciseSensitivityMultiplier
     }
 }
 
@@ -89,5 +92,6 @@ extension TrioCustomOrefVariables {
         case end
         case smbMinutes
         case uamMinutes
+        case exerciseSensitivityMultiplier
     }
 }

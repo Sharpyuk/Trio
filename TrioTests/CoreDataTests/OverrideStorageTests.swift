@@ -222,4 +222,332 @@ import Testing
         #expect(notUploadedOverrides[0].duration == 90, "Duration should match")
         #expect(notUploadedOverrides[0].eventType == .nsExercise, "Event type should be exercise")
     }
+
+    @Test("Expired finite overrides are not active") func testExpiredFiniteOverrideIsNotActive() async throws {
+        let expiredOverride = Override(
+            name: "Expired Override",
+            enabled: true,
+            date: Date().addingTimeInterval(-2.hours.timeInterval),
+            duration: 30,
+            indefinite: false,
+            percentage: 50,
+            smbIsOff: true,
+            isPreset: false,
+            id: UUID().uuidString,
+            overrideTarget: true,
+            target: 110,
+            advancedSettings: false,
+            isfAndCr: false,
+            isf: false,
+            cr: false,
+            smbIsScheduledOff: false,
+            start: 0,
+            end: 0,
+            smbMinutes: 30,
+            uamMinutes: 30
+        )
+
+        try await storage.storeOverride(override: expiredOverride)
+
+        let activeOverrideIDs = try await storage.loadLatestOverrideConfigurations(fetchLimit: 1)
+
+        #expect(activeOverrideIDs.isEmpty, "Expired finite overrides should not be active")
+    }
+
+    @Test("Exercise mode stores basal suspension and SMB suppression") func testExerciseModeOverrideValues() async throws {
+        let exerciseOverride = Override(
+            name: OverrideStored.exerciseModeName,
+            enabled: true,
+            date: Date(),
+            duration: 180,
+            indefinite: false,
+            percentage: 0,
+            smbIsOff: true,
+            isPreset: false,
+            id: UUID().uuidString,
+            overrideTarget: true,
+            target: 108,
+            advancedSettings: false,
+            isfAndCr: false,
+            isf: false,
+            cr: false,
+            smbIsScheduledOff: false,
+            start: 0,
+            end: 0,
+            smbMinutes: 30,
+            uamMinutes: 30
+        )
+
+        try await storage.storeOverride(override: exerciseOverride)
+
+        let activeOverrideIDs = try await storage.loadLatestOverrideConfigurations(fetchLimit: 1)
+        let activeOverrides = try await testContext.perform {
+            try activeOverrideIDs.compactMap { try testContext.existingObject(with: $0) as? OverrideStored }
+        }
+
+        #expect(activeOverrides.first?.isExerciseMode == true, "Exercise Mode should be active")
+        #expect(activeOverrides.first?.percentage == 0, "Exercise Mode should allow 0% basal")
+        #expect(activeOverrides.first?.smbIsOff == true, "Exercise Mode should suppress SMBs when configured")
+        #expect(activeOverrides.first?.target?.decimalValue == 108, "Exercise Mode should store the configured target")
+    }
+
+    @Test("Scheduled exercise mode is visible but not active before start") func testScheduledExerciseMode() async throws {
+        let scheduledOverride = Override(
+            name: OverrideStored.exerciseModeName,
+            enabled: true,
+            date: Date().addingTimeInterval(30.minutes.timeInterval),
+            duration: 120,
+            indefinite: false,
+            percentage: 50,
+            smbIsOff: true,
+            isPreset: false,
+            id: UUID().uuidString,
+            overrideTarget: true,
+            target: 108,
+            advancedSettings: false,
+            isfAndCr: false,
+            isf: false,
+            cr: false,
+            smbIsScheduledOff: false,
+            start: 0,
+            end: 0,
+            smbMinutes: 30,
+            uamMinutes: 30
+        )
+
+        try await storage.storeOverride(override: scheduledOverride)
+
+        let activeOverrideIDs = try await storage.loadLatestOverrideConfigurations(fetchLimit: 1)
+        let scheduledExerciseIDs = try await storage.fetchScheduledExerciseOverrides()
+
+        #expect(activeOverrideIDs.isEmpty, "Scheduled Exercise Mode should not apply before its start time")
+        #expect(scheduledExerciseIDs.count == 1, "Scheduled Exercise Mode should be listed for visibility")
+    }
+
+    @Test("Pre-exercise phase is active before activity start") func testPreExercisePhaseIsActiveBeforeActivity() async throws {
+        let sessionID = UUID().uuidString
+        let preExercise = Override(
+            name: OverrideStored.exerciseOverrideName(type: ExerciseType.run.rawValue, phase: .preExercise),
+            enabled: true,
+            date: Date().addingTimeInterval(-15.minutes.timeInterval),
+            duration: 60,
+            indefinite: false,
+            percentage: 0,
+            smbIsOff: true,
+            isPreset: false,
+            id: sessionID,
+            overrideTarget: true,
+            target: 108,
+            advancedSettings: false,
+            isfAndCr: false,
+            isf: false,
+            cr: false,
+            smbIsScheduledOff: false,
+            start: 0,
+            end: 0,
+            smbMinutes: 30,
+            uamMinutes: 30
+        )
+
+        try await storage.storeOverride(override: preExercise)
+
+        let activeOverrideIDs = try await storage.loadLatestOverrideConfigurations(fetchLimit: 1)
+        let activeOverrides = try await testContext.perform {
+            try activeOverrideIDs.compactMap { try testContext.existingObject(with: $0) as? OverrideStored }
+        }
+
+        #expect(activeOverrides.first?.exercisePhase == .preExercise)
+        #expect(activeOverrides.first?.percentage == 0)
+        #expect(activeOverrides.first?.smbIsOff == true)
+    }
+
+    @Test("Exercise phase replaces pre-exercise at activity start") func testExercisePhaseReplacesPreExercise() async throws {
+        let sessionID = UUID().uuidString
+        let preExercise = Override(
+            name: OverrideStored.exerciseOverrideName(type: ExerciseType.run.rawValue, phase: .preExercise),
+            enabled: true,
+            date: Date().addingTimeInterval(-90.minutes.timeInterval),
+            duration: 60,
+            indefinite: false,
+            percentage: 0,
+            smbIsOff: true,
+            isPreset: false,
+            id: sessionID,
+            overrideTarget: true,
+            target: 108,
+            advancedSettings: false,
+            isfAndCr: false,
+            isf: false,
+            cr: false,
+            smbIsScheduledOff: false,
+            start: 0,
+            end: 0,
+            smbMinutes: 30,
+            uamMinutes: 30
+        )
+        let exercise = Override(
+            name: OverrideStored.exerciseOverrideName(type: ExerciseType.run.rawValue, phase: .duringExercise),
+            enabled: true,
+            date: Date().addingTimeInterval(-30.minutes.timeInterval),
+            duration: 120,
+            indefinite: false,
+            percentage: 40,
+            smbIsOff: true,
+            isPreset: false,
+            id: sessionID,
+            overrideTarget: true,
+            target: 120,
+            advancedSettings: false,
+            isfAndCr: false,
+            isf: false,
+            cr: false,
+            smbIsScheduledOff: false,
+            start: 0,
+            end: 0,
+            smbMinutes: 30,
+            uamMinutes: 30
+        )
+
+        try await storage.storeOverride(override: preExercise)
+        try await storage.storeOverride(override: exercise)
+
+        let activeOverrideIDs = try await storage.loadLatestOverrideConfigurations(fetchLimit: 1)
+        let activeOverrides = try await testContext.perform {
+            try activeOverrideIDs.compactMap { try testContext.existingObject(with: $0) as? OverrideStored }
+        }
+
+        #expect(activeOverrides.first?.exercisePhase == .duringExercise)
+        #expect(activeOverrides.first?.percentage == 40)
+    }
+
+    @Test("Post-exercise sensitivity decays and expires") func testPostExerciseSensitivityDecayAndExpiry() async throws {
+        let now = Date()
+        let postExercise = Override(
+            name: OverrideStored.exerciseOverrideName(type: ExerciseType.run.rawValue, phase: .postExercise),
+            enabled: true,
+            date: now.addingTimeInterval(-4.hours.timeInterval),
+            duration: 8 * 60,
+            indefinite: false,
+            percentage: 100,
+            smbIsOff: false,
+            isPreset: false,
+            id: UUID().uuidString,
+            overrideTarget: true,
+            target: 108,
+            advancedSettings: false,
+            isfAndCr: false,
+            isf: false,
+            cr: false,
+            smbIsScheduledOff: false,
+            start: 30,
+            end: Decimal(ExerciseSensitivityDecayType.linear.rawValue),
+            smbMinutes: 30,
+            uamMinutes: 30
+        )
+
+        try await storage.storeOverride(override: postExercise)
+
+        let activeOverrideIDs = try await storage.loadLatestOverrideConfigurations(fetchLimit: 1)
+        let activeOverrides = try await testContext.perform {
+            try activeOverrideIDs.compactMap { try testContext.existingObject(with: $0) as? OverrideStored }
+        }
+
+        let effectiveSensitivity = activeOverrides.first?.effectivePostExerciseSensitivityPercent(at: now) ?? 0
+
+        #expect(activeOverrides.first?.exercisePhase == .postExercise)
+        #expect(effectiveSensitivity > 14 && effectiveSensitivity < 16)
+        #expect(
+            activeOverrides.first?
+                .effectivePostExerciseSensitivityPercent(at: now.addingTimeInterval(9.hours.timeInterval)) == 0
+        )
+    }
+
+    @Test("Short exercise creates no recovery effect") func testShortExerciseCreatesNoRecoveryEffect() {
+        let recommendation = ExerciseRecoveryCalculator.recommendation(forExerciseDurationMinutes: 9)
+
+        #expect(recommendation.durationMinutes == 0)
+        #expect(recommendation.sensitivityPercent == 0)
+        #expect(recommendation.hasRecoveryEffect == false)
+    }
+
+    @Test("Longer exercise creates proportional recovery") func testLongerExerciseCreatesProportionalRecovery() {
+        let moderate = ExerciseRecoveryCalculator.recommendation(forExerciseDurationMinutes: 45)
+        let long = ExerciseRecoveryCalculator.recommendation(forExerciseDurationMinutes: 90)
+        let ultra = ExerciseRecoveryCalculator.recommendation(forExerciseDurationMinutes: 180)
+
+        #expect(moderate.durationMinutes >= 240 && moderate.durationMinutes <= 480)
+        #expect(moderate.sensitivityPercent >= 10 && moderate.sensitivityPercent <= 20)
+        #expect(long.durationMinutes >= 480 && long.durationMinutes <= 720)
+        #expect(long.sensitivityPercent >= 20 && long.sensitivityPercent <= 30)
+        #expect(ultra.durationMinutes >= 720 && ultra.durationMinutes <= 1440)
+        #expect(ultra.sensitivityPercent >= 25 && ultra.sensitivityPercent <= 40)
+    }
+
+    @Test("Exercise report export produces valid JSON") func testExerciseReportExportProducesValidJSON() throws {
+        let report = ExerciseReport(
+            id: UUID().uuidString,
+            createdAt: Date(),
+            exerciseType: ExerciseType.run.rawValue,
+            customExerciseTypeName: nil,
+            preExerciseStartTime: Date().addingTimeInterval(-90.minutes.timeInterval),
+            exerciseStartTime: Date().addingTimeInterval(-30.minutes.timeInterval),
+            exerciseStopTime: Date(),
+            actualExerciseDurationMinutes: 30,
+            startedAutomatically: true,
+            startedEarly: false,
+            wasCancelled: false,
+            recoveryDurationCalculatedMinutes: 240,
+            recoverySensitivityAdjustmentCalculated: 10,
+            decayModelUsed: .linear,
+            preExerciseConfiguration: ExerciseReport.PhaseConfiguration(
+                basalPercentage: 0,
+                target: 108,
+                smbSuppressed: true
+            ),
+            exerciseConfiguration: ExerciseReport.PhaseConfiguration(
+                basalPercentage: 40,
+                target: 108,
+                smbSuppressed: true
+            ),
+            recoveryConfiguration: ExerciseReport.PhaseConfiguration(
+                basalPercentage: 100,
+                target: 108,
+                smbSuppressed: false
+            ),
+            glucoseStats: ExerciseReport.GlucoseStats(
+                bgAtPreExerciseStart: 100,
+                bgAtExerciseStart: 110,
+                bgAtExerciseEnd: 120,
+                bgAtRecoveryEnd: nil,
+                minBGDuringExercise: 95,
+                maxBGDuringExercise: 125,
+                averageBGDuringExercise: 110,
+                glucoseTrendBeforeExercise: 5,
+                glucoseTrendAfterExercise: nil
+            ),
+            insulinStats: ExerciseReport.InsulinStats(
+                iobAtPreExerciseStart: 1.2,
+                iobAtExerciseStart: 0.8,
+                iobAtExerciseEnd: 0.5,
+                iobAtRecoveryEnd: nil,
+                basalDeliveredDuringPreExercise: nil,
+                basalDeliveredDuringExercise: nil,
+                basalDeliveredDuringRecovery: nil,
+                preExerciseSMBSuppressed: true,
+                exerciseSMBSuppressed: true,
+                recoverySMBSuppressed: false,
+                bolusesDeliveredDuringSession: 0
+            )
+        )
+
+        let url = try ExerciseReportStore.save(report)
+        let data = try Data(contentsOf: url)
+        let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+
+        #expect(object?["exerciseType"] as? String == ExerciseType.run.rawValue)
+        #expect(object?["glucoseStats"] != nil)
+        #expect(object?["insulinStats"] != nil)
+
+        try? FileManager.default.removeItem(at: url)
+    }
 }

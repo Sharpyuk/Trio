@@ -8,6 +8,8 @@ extension Adjustments {
         @State var state = StateModel()
         @State var isEditing = false
         @State var showOverrideCreationSheet = false
+        @State var showExerciseModeCreationSheet = false
+        @State var showExerciseReportsSheet = false
         @State var showTempTargetCreationSheet = false
         @State var showingDetail = false
         @State var showOverrideCheckmark: Bool = false
@@ -88,14 +90,30 @@ extension Adjustments {
                     ToolbarItem(placement: .topBarTrailing) {
                         switch state.selectedTab {
                         case .overrides:
-                            Button(action: {
-                                showOverrideCreationSheet = true
-                            }, label: {
+                            Menu {
+                                Button(action: {
+                                    showExerciseModeCreationSheet = true
+                                }, label: {
+                                    Label("Exercise Override", systemImage: "figure.run")
+                                })
+
+                                Button(action: {
+                                    showExerciseReportsSheet = true
+                                }, label: {
+                                    Label("Exercise Reports", systemImage: "doc.text.magnifyingglass")
+                                })
+
+                                Button(action: {
+                                    showOverrideCreationSheet = true
+                                }, label: {
+                                    Label("Override", systemImage: "plus")
+                                })
+                            } label: {
                                 HStack {
-                                    Text("Add Override")
+                                    Text("Add")
                                     Image(systemName: "plus")
                                 }
-                            })
+                            }
                         case .tempTargets:
                             Button(action: {
                                 showTempTargetCreationSheet = true
@@ -126,6 +144,17 @@ extension Adjustments {
                     }
                 }) {
                     AddOverrideForm(state: state)
+                }
+                .sheet(isPresented: $showExerciseModeCreationSheet, onDismiss: {
+                    Task {
+                        await state.resetExerciseModeState()
+                        showExerciseModeCreationSheet = false
+                    }
+                }) {
+                    ExerciseModeForm(state: state)
+                }
+                .sheet(isPresented: $showExerciseReportsSheet) {
+                    ExerciseReportsListView()
                 }
                 .sheet(isPresented: $showTempTargetCreationSheet, onDismiss: {
                     Task {
@@ -213,29 +242,54 @@ extension Adjustments {
             }
         }
 
-        var currentActiveAdjustment: some View {
+        @ViewBuilder var currentActiveAdjustment: some View {
             switch state.selectedTab {
             case .overrides:
                 Section {
-                    HStack {
-                        Text("\(state.activeOverrideName) is running")
+                    if let override = state.currentActiveOverride, override.isExerciseMode {
+                        ExercisePhaseStatusView(
+                            override: override,
+                            formattedTimeRemaining: formattedTimeRemaining,
+                            startExerciseNow: {
+                                Task {
+                                    await state.startExerciseNow(override.objectID)
+                                }
+                            },
+                            stopExercise: {
+                                Task {
+                                    await state.stopExerciseNow(override.objectID)
+                                }
+                            }
+                        )
+                    } else {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("\(state.activeOverrideName) is running")
 
-                        Spacer()
-                        Image(systemName: "square.and.pencil")
-                            .foregroundStyle(Color.primary)
-                    }
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        Task {
-                            /// To avoid editing the Preset when a Preset-Override is running we first duplicate the Preset-Override as a non-Preset Override
-                            /// The currentActiveOverride variable in the State will update automatically via MOC notification
-                            await state.duplicateOverridePresetAndCancelPreviousOverride()
+                                if let activeUntil = state.currentActiveOverride?.activeUntilDate() {
+                                    Text("\(formattedTimeRemaining(activeUntil.timeIntervalSinceNow)) remaining")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
 
-                            /// selectedOverride is used for passing the chosen Override to the EditSheet so we have to set the updated currentActiveOverride to be the selectedOverride
-                            selectedOverride = state.currentActiveOverride
+                            Spacer()
+                            Image(systemName: "square.and.pencil")
+                                .foregroundStyle(Color.primary)
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            Task {
+                                /// To avoid editing the Preset when a Preset-Override is running we first duplicate the Preset-Override as a non-Preset Override
+                                /// The currentActiveOverride variable in the State will update automatically via MOC notification
+                                await state.duplicateOverridePresetAndCancelPreviousOverride()
 
-                            /// Now we can show the Edit sheet
-                            state.showOverrideEditSheet = true
+                                /// selectedOverride is used for passing the chosen Override to the EditSheet so we have to set the updated currentActiveOverride to be the selectedOverride
+                                selectedOverride = state.currentActiveOverride
+
+                                /// Now we can show the Edit sheet
+                                state.showOverrideEditSheet = true
+                            }
                         }
                     }
                 }
@@ -399,5 +453,472 @@ extension Adjustments.RootView: View {
                 }
             }
         }
+    }
+}
+
+struct ExerciseModeForm: View {
+    @Bindable var state: Adjustments.StateModel
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(AppState.self) private var appState
+
+    @State private var targetStep: Decimal = 5
+    @State private var displayPreTarget = false
+    @State private var displayExerciseTarget = false
+    @State private var displayPostTarget = false
+
+    private var isScheduled: Bool {
+        state.exerciseStartDate > Date().addingTimeInterval(60)
+    }
+
+    var body: some View {
+        NavigationView {
+            List {
+                Section(header: Text("Exercise")) {
+                    Picker("Type", selection: $state.exerciseType) {
+                        ForEach(ExerciseType.allCases) { type in
+                            Text(type.rawValue).tag(type)
+                        }
+                    }
+
+                    if state.exerciseType == .custom {
+                        TextField("Custom exercise type", text: $state.customExerciseTypeName)
+                    }
+
+                    DatePicker("Override Start Time", selection: $state.exerciseStartDate, in: Date.now...)
+                }
+                .listRowBackground(Color.chart)
+
+                Section(header: Text("Pre-exercise")) {
+                    Toggle("Enable pre-exercise phase", isOn: $state.preExerciseEnabled)
+
+                    if state.preExerciseEnabled {
+                        durationStepper(
+                            title: String(localized: "Starts before activity"),
+                            value: Binding(
+                                get: { Int(state.preExerciseDuration) },
+                                set: { state.preExerciseDuration = Decimal($0) }
+                            ),
+                            range: 0 ... 120,
+                            step: 30
+                        )
+                        basalStepper(
+                            title: String(localized: "Basal Rate"),
+                            value: $state.preExerciseBasalPercentage
+                        )
+                        Toggle("Suppress SMBs", isOn: $state.preExerciseSuppressSMB)
+                        targetPicker(
+                            label: String(localized: "Target Glucose"),
+                            selection: $state.preExerciseTarget,
+                            displayPickerTarget: $displayPreTarget
+                        )
+                    }
+                }
+                .listRowBackground(Color.chart)
+
+                Section(header: Text("Active exercise")) {
+                    basalStepper(
+                        title: String(localized: "Basal Rate"),
+                        value: $state.exerciseBasalPercentage
+                    )
+                    Toggle("Suppress SMBs", isOn: $state.exerciseSuppressSMB)
+                    targetPicker(
+                        label: String(localized: "Target Glucose"),
+                        selection: $state.exerciseTarget,
+                        displayPickerTarget: $displayExerciseTarget
+                    )
+                }
+                .listRowBackground(Color.chart)
+
+                Section(
+                    header: Text("Post-exercise recovery"),
+                    footer: Text(
+                        "Recovery is calculated from the actual exercise duration when you stop exercise. Under 10 minutes creates a report without recovery sensitivity."
+                    )
+                ) {
+                    Toggle("Enable recovery phase", isOn: $state.postExerciseEnabled)
+
+                    if state.postExerciseEnabled {
+                        Text("Sensitivity uses automatic linear decay based on completed exercise duration.")
+                            .foregroundStyle(.secondary)
+                        basalStepper(
+                            title: String(localized: "Basal Rate"),
+                            value: $state.postExerciseBasalPercentage
+                        )
+                        Toggle("Suppress SMBs", isOn: $state.postExerciseSuppressSMB)
+                        targetPicker(
+                            label: String(localized: "Target Glucose"),
+                            selection: $state.postExerciseTarget,
+                            displayPickerTarget: $displayPostTarget
+                        )
+                    }
+                }
+                .listRowBackground(Color.chart)
+
+                Section {
+                    Button(action: {
+                        Task {
+                            await state.saveExerciseMode()
+                            dismiss()
+                        }
+                    }, label: {
+                        Text(isScheduled ? "Schedule Exercise Override" : "Start Exercise Override")
+                    })
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .tint(.white)
+                }
+                .listRowBackground(Color(.systemBlue))
+            }
+            .listSectionSpacing(10)
+            .padding(.top, 30)
+            .ignoresSafeArea(edges: .top)
+            .scrollContentBackground(.hidden)
+            .background(appState.trioBackgroundColor(for: colorScheme))
+            .navigationTitle("Exercise Override")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+            }
+            .onAppear {
+                targetStep = state.units == .mgdL ? 5 : 9
+                state.exerciseStartDate = Date()
+            }
+        }
+    }
+
+    @ViewBuilder private func durationStepper(
+        title: String,
+        value: Binding<Int>,
+        range: ClosedRange<Int>,
+        step: Int
+    ) -> some View {
+        Stepper(value: value, in: range, step: step) {
+            HStack {
+                Text(title)
+                Spacer()
+                Text(state.formatHoursAndMinutes(value.wrappedValue))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder private func percentStepper(
+        title: String,
+        value: Binding<Int>,
+        range: ClosedRange<Int>,
+        step: Int
+    ) -> some View {
+        Stepper(value: value, in: range, step: step) {
+            HStack {
+                Text(title)
+                Spacer()
+                Text("+\(value.wrappedValue)%")
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder private func basalStepper(title: String, value: Binding<Double>) -> some View {
+        Stepper(
+            value: Binding(
+                get: { Int(value.wrappedValue) },
+                set: { value.wrappedValue = Double($0) }
+            ),
+            in: 0 ... 100,
+            step: 5
+        ) {
+            HStack {
+                Text(title)
+                Spacer()
+                Text("\(Int(value.wrappedValue))%")
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder private func targetPicker(
+        label: String,
+        selection: Binding<Decimal>,
+        displayPickerTarget: Binding<Bool>
+    ) -> some View {
+        let settingsProvider = PickerSettingsProvider.shared
+        let glucoseSetting = PickerSetting(value: 0, step: targetStep, min: 72, max: 270, type: .glucose)
+
+        TargetPicker(
+            label: label,
+            selection: selection,
+            options: settingsProvider.generatePickerValues(
+                from: glucoseSetting,
+                units: state.units,
+                roundMinToStep: true
+            ),
+            units: state.units,
+            targetStep: $targetStep,
+            displayPickerTarget: displayPickerTarget,
+            toggleScrollWheel: toggleScrollWheel
+        )
+    }
+
+    private func toggleScrollWheel(_ toggle: Bool) -> Bool {
+        displayPreTarget = false
+        displayExerciseTarget = false
+        displayPostTarget = false
+        return !toggle
+    }
+}
+
+struct ExercisePhaseStatusView: View {
+    let override: OverrideStored
+    let formattedTimeRemaining: (TimeInterval) -> String
+    let startExerciseNow: () -> Void
+    let stopExercise: () -> Void
+    @State private var confirmStopExercise = false
+
+    private var phase: ExercisePhase {
+        override.exercisePhase ?? .duringExercise
+    }
+
+    private var phaseColor: Color {
+        switch phase {
+        case .preExercise:
+            return .yellow
+        case .duringExercise:
+            return .purple
+        case .postExercise:
+            return .green
+        case .inactive:
+            return .gray
+        }
+    }
+
+    private var remainingText: String {
+        if phase == .duringExercise {
+            let elapsed = abs((override.date ?? Date()).timeIntervalSinceNow)
+            return formattedTimeRemaining(elapsed) + " elapsed"
+        }
+
+        guard let activeUntil = override.activeUntilDate() else {
+            return ""
+        }
+
+        return formattedTimeRemaining(activeUntil.timeIntervalSinceNow) + " remaining"
+    }
+
+    private var detailText: String {
+        var details = ["basal \(Int(override.percentage))%"]
+        details.append(override.smbIsOff ? "SMB off" : "SMB allowed")
+
+        let sensitivity = override.effectivePostExerciseSensitivityPercent()
+        if sensitivity > 0 {
+            details.append("sensitivity +\(Int(truncating: NSDecimalNumber(decimal: sensitivity)))%")
+        }
+
+        return details.joined(separator: ", ")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(OverrideStored.exerciseOverrideName): \(phase.title)")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                    Text("\(override.exerciseTypeName ?? String(localized: "Exercise")), \(remainingText)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(detailText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Color.secondary.opacity(0.2))
+                    Capsule()
+                        .fill(phaseColor)
+                        .frame(width: max(8, progressWidth(totalWidth: geo.size.width)))
+                }
+            }
+            .frame(height: 8)
+
+            if phase == .preExercise {
+                Button {
+                    startExerciseNow()
+                } label: {
+                    Label("Start Exercise Now", systemImage: "figure.run")
+                }
+                .buttonStyle(.borderless)
+            } else if phase == .duringExercise {
+                Button(role: .destructive) {
+                    confirmStopExercise = true
+                } label: {
+                    Label("Stop Exercise", systemImage: "stop.circle")
+                }
+                .buttonStyle(.borderless)
+                .confirmationDialog("Stop exercise and start recovery now?", isPresented: $confirmStopExercise) {
+                    Button("Stop Exercise", role: .destructive, action: stopExercise)
+                    Button("Cancel", role: .cancel) {}
+                }
+            }
+        }
+    }
+
+    private func progressWidth(totalWidth: CGFloat) -> CGFloat {
+        guard let start = override.date,
+              let end = override.activeUntilDate()
+        else {
+            return totalWidth
+        }
+
+        let total = end.timeIntervalSince(start)
+        guard total > 0 else {
+            return totalWidth
+        }
+
+        let elapsed = Date().timeIntervalSince(start)
+        return totalWidth * CGFloat(max(0, min(1, elapsed / total)))
+    }
+}
+
+struct ExerciseReportsListView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var reports: [ExerciseReport] = []
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if reports.isEmpty {
+                    Text("No exercise reports yet")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(reports) { report in
+                        NavigationLink {
+                            ExerciseReportDetailView(report: report)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(report.exerciseType)
+                                    .font(.headline)
+                                Text(report.exerciseStopTime, style: .date)
+                                    +
+                                    Text(" ")
+                                    +
+                                    Text(report.exerciseStopTime, style: .time)
+                                Text(
+                                    "\(Int(truncating: NSDecimalNumber(decimal: report.actualExerciseDurationMinutes))) min, recovery \(report.recoveryDurationCalculatedMinutes / 60)h, sensitivity +\(Int(truncating: NSDecimalNumber(decimal: report.recoverySensitivityAdjustmentCalculated)))%"
+                                )
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Exercise Reports")
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+            .onAppear {
+                reports = ExerciseReportStore.loadReports()
+            }
+        }
+    }
+}
+
+struct ExerciseReportDetailView: View {
+    let report: ExerciseReport
+    @State private var jsonURL: URL?
+    @State private var csvURL: URL?
+
+    var body: some View {
+        List {
+            Section("Session") {
+                row("Type", report.exerciseType)
+                row("Pre-exercise start", report.preExerciseStartTime.map(formatDate) ?? "None")
+                row("Exercise start", formatDate(report.exerciseStartTime))
+                row("Exercise stop", formatDate(report.exerciseStopTime))
+                row("Duration", "\(Int(truncating: NSDecimalNumber(decimal: report.actualExerciseDurationMinutes))) min")
+                row("Started early", report.startedEarly ? "Yes" : "No")
+                row("Cancelled / no recovery", report.wasCancelled ? "Yes" : "No")
+            }
+
+            Section("Recovery") {
+                row("Duration", "\(report.recoveryDurationCalculatedMinutes) min")
+                row("Sensitivity", "+\(report.recoverySensitivityAdjustmentCalculated)%")
+                row("Decay", report.decayModelUsed.title)
+            }
+
+            Section("Glucose") {
+                row("BG at pre start", optionalInt(report.glucoseStats.bgAtPreExerciseStart))
+                row("BG at exercise start", optionalInt(report.glucoseStats.bgAtExerciseStart))
+                row("BG at exercise end", optionalInt(report.glucoseStats.bgAtExerciseEnd))
+                row("Min during exercise", optionalInt(report.glucoseStats.minBGDuringExercise))
+                row("Max during exercise", optionalInt(report.glucoseStats.maxBGDuringExercise))
+                row("Average during exercise", report.glucoseStats.averageBGDuringExercise.map { "\($0)" } ?? "Unavailable")
+                row("Trend before", report.glucoseStats.glucoseTrendBeforeExercise.map { "\($0)" } ?? "Unavailable")
+                row("Trend after", report.glucoseStats.glucoseTrendAfterExercise.map { "\($0)" } ?? "Unavailable")
+            }
+
+            Section("Insulin") {
+                row("IOB at pre start", optionalDecimal(report.insulinStats.iobAtPreExerciseStart))
+                row("IOB at exercise start", optionalDecimal(report.insulinStats.iobAtExerciseStart))
+                row("IOB at exercise end", optionalDecimal(report.insulinStats.iobAtExerciseEnd))
+                row("Boluses during session", optionalDecimal(report.insulinStats.bolusesDeliveredDuringSession))
+                row("Pre SMB", report.insulinStats.preExerciseSMBSuppressed ? "Suppressed" : "Allowed")
+                row("Exercise SMB", report.insulinStats.exerciseSMBSuppressed ? "Suppressed" : "Allowed")
+                row("Recovery SMB", report.insulinStats.recoverySMBSuppressed ? "Suppressed" : "Allowed")
+            }
+
+            Section("Export") {
+                if let jsonURL {
+                    ShareLink(item: jsonURL) {
+                        Label("Export JSON", systemImage: "square.and.arrow.up")
+                    }
+                }
+                if let csvURL {
+                    ShareLink(item: csvURL) {
+                        Label("Export CSV", systemImage: "tablecells")
+                    }
+                }
+            }
+        }
+        .navigationTitle(report.exerciseType)
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            jsonURL = try? ExerciseReportStore.exportURL(for: report)
+            csvURL = try? ExerciseReportStore.csvURL(for: report)
+        }
+    }
+
+    private func row(_ title: String, _ value: String) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            Text(value)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.trailing)
+        }
+    }
+
+    private func optionalInt(_ value: Int?) -> String {
+        value.map(String.init) ?? "Unavailable"
+    }
+
+    private func optionalDecimal(_ value: Decimal?) -> String {
+        value.map { "\($0)" } ?? "Unavailable"
+    }
+
+    private func formatDate(_ date: Date) -> String {
+        DateFormatter.localizedString(from: date, dateStyle: .medium, timeStyle: .short)
     }
 }
