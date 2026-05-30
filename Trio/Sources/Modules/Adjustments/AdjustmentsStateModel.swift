@@ -91,6 +91,13 @@ extension Adjustments {
         var postExerciseSuppressSMB: Bool = false
         var postExerciseSensitivityStartPercent: Decimal = 20
         var postExerciseSensitivityDecayType: ExerciseSensitivityDecayType = .linear
+        var announceGlucoseDuringExercise: Bool = false
+        var announcementInterval: Decimal = 5
+        var announcementIncludeTrend: Bool = true
+        var announcementIncludeRateOfChange: Bool = false
+        var announcementUrgentEnabled: Bool = true
+        var announcementLowThreshold: Decimal = 70
+        var announcementHighThreshold: Decimal = 180
 
         // Core Data
         let coredataContext = CoreDataStack.shared.newTaskContext()
@@ -107,6 +114,7 @@ extension Adjustments {
 
         /// Subscribes to notifications and initializes settings.
         override func subscribe() {
+            ExerciseGlucoseAnnouncementManager.shared.startMonitoring()
             setupNotification()
             setupSettings()
             broadcaster.register(SettingsObserver.self, observer: self)

@@ -36,6 +36,15 @@ struct ExerciseReport: Codable, Identifiable {
         let bolusesDeliveredDuringSession: Decimal?
     }
 
+    struct AnnouncementStats: Codable {
+        let announceGlucoseEnabled: Bool
+        let announcementInterval: Decimal
+        let includeTrend: Bool
+        let includeRateOfChange: Bool
+        let urgentAnnouncementsEnabled: Bool
+        let numberOfAnnouncementsMade: Int
+    }
+
     let id: String
     let createdAt: Date
     let exerciseType: String
@@ -47,12 +56,14 @@ struct ExerciseReport: Codable, Identifiable {
     let startedAutomatically: Bool
     let startedEarly: Bool
     let wasCancelled: Bool
+    let recoverySkippedReason: String?
     let recoveryDurationCalculatedMinutes: Int
     let recoverySensitivityAdjustmentCalculated: Decimal
     let decayModelUsed: ExerciseSensitivityDecayType
     let preExerciseConfiguration: PhaseConfiguration?
     let exerciseConfiguration: PhaseConfiguration
     let recoveryConfiguration: PhaseConfiguration?
+    let announcementStats: AnnouncementStats
     let glucoseStats: GlucoseStats
     let insulinStats: InsulinStats
 }
@@ -85,6 +96,10 @@ enum ExerciseReportStore {
             .compactMap { try? Data(contentsOf: $0) }
             .compactMap { try? decoder.decode(ExerciseReport.self, from: $0) }
             .sorted { $0.exerciseStopTime > $1.exerciseStopTime }
+    }
+
+    static func loadReport(sessionID: String) -> ExerciseReport? {
+        loadReports().first { $0.id == sessionID }
     }
 
     static func exportURL(for report: ExerciseReport) throws -> URL {
@@ -164,7 +179,8 @@ extension Adjustments.StateModel {
                     // Use the first override to create a new OverrideRunStored entry
                     if let canceledOverride = results.first {
                         let newOverrideRunStored = OverrideRunStored(context: self.viewContext)
-                        newOverrideRunStored.id = UUID()
+                        newOverrideRunStored.id = canceledOverride
+                            .exercisePhase == .inactive ? UUID() : (UUID(uuidString: canceledOverride.id ?? "") ?? UUID())
                         newOverrideRunStored.name = canceledOverride.name
                         newOverrideRunStored.startDate = canceledOverride.date ?? .distantPast
                         newOverrideRunStored.endDate = Date()
@@ -184,6 +200,7 @@ extension Adjustments.StateModel {
                 if self.viewContext.hasChanges {
                     // Save changes and update the View
                     try self.viewContext.save()
+                    ExerciseGlucoseAnnouncementManager.shared.stopSpeech()
                     self.updateLatestOverrideConfiguration()
                 }
             }
@@ -287,49 +304,97 @@ extension Adjustments.StateModel {
     func saveExerciseMode() async {
         do {
             let now = Date()
-            let sessionStart = exerciseStartDate <= now.addingTimeInterval(60) ? now : exerciseStartDate
             let sessionID = UUID().uuidString
             let exerciseTypeName = resolvedExerciseTypeName
 
-            var phaseOverrides: [Override] = []
-            let activeExerciseStart: Date
+            let preMinutes = preExerciseEnabled ? NSDecimalNumber(decimal: preExerciseDuration).doubleValue : 0
+            let scheduledExerciseStart: Date = {
+                if exerciseStartDate <= now.addingTimeInterval(60), preExerciseEnabled, preMinutes > 0 {
+                    return now.addingTimeInterval(preMinutes * 60)
+                }
+                return exerciseStartDate <= now.addingTimeInterval(60) ? now : exerciseStartDate
+            }()
+            let plannedPreStart = preExerciseEnabled && preMinutes > 0
+                ? scheduledExerciseStart.addingTimeInterval(-preMinutes * 60)
+                : scheduledExerciseStart
 
-            if preExerciseEnabled, preExerciseDuration > 0 {
-                activeExerciseStart = sessionStart.addingTimeInterval(
-                    TimeInterval(NSDecimalNumber(decimal: preExerciseDuration).doubleValue * 60)
-                )
-                phaseOverrides.append(exerciseOverride(
-                    sessionID: sessionID,
-                    exerciseTypeName: exerciseTypeName,
-                    phase: .preExercise,
-                    startDate: sessionStart,
-                    duration: preExerciseDuration,
-                    basalPercentage: preExerciseBasalPercentage,
-                    suppressSMB: preExerciseSuppressSMB,
-                    target: preExerciseTarget
-                ))
+            let initialPhase: ExercisePhase
+            let initialStart: Date
+            let initialDuration: Decimal
+            let initialBasal: Double
+            let initialSMB: Bool
+            let initialTarget: Decimal
+
+            if preExerciseEnabled, preMinutes > 0, now < scheduledExerciseStart {
+                initialPhase = .preExercise
+                initialStart = max(plannedPreStart, now)
+                initialDuration = Decimal(max(1, scheduledExerciseStart.timeIntervalSince(initialStart) / 60))
+                initialBasal = preExerciseBasalPercentage
+                initialSMB = preExerciseSuppressSMB
+                initialTarget = preExerciseTarget
             } else {
-                activeExerciseStart = sessionStart
+                initialPhase = .duringExercise
+                initialStart = scheduledExerciseStart <= now.addingTimeInterval(60) ? now : scheduledExerciseStart
+                initialDuration = 2160
+                initialBasal = exerciseBasalPercentage
+                initialSMB = exerciseSuppressSMB
+                initialTarget = exerciseTarget
             }
 
-            phaseOverrides.append(exerciseOverride(
-                sessionID: sessionID,
-                exerciseTypeName: exerciseTypeName,
-                phase: .duringExercise,
-                startDate: activeExerciseStart,
-                duration: 2160,
-                basalPercentage: exerciseBasalPercentage,
-                suppressSMB: exerciseSuppressSMB,
-                target: exerciseTarget
-            ))
-
-            if phaseOverrides.contains(where: { $0.date <= now.addingTimeInterval(60) }) {
+            if initialStart <= now.addingTimeInterval(60) {
                 await disableAllActiveOverrides(createOverrideRunEntry: true)
             }
 
-            for phaseOverride in phaseOverrides {
-                try await overrideStorage.storeOverride(override: phaseOverride)
-            }
+            try await overrideStorage.storeOverride(override: exerciseOverride(
+                sessionID: sessionID,
+                exerciseTypeName: exerciseTypeName,
+                phase: initialPhase,
+                startDate: initialStart,
+                duration: initialDuration,
+                basalPercentage: initialBasal,
+                suppressSMB: initialSMB,
+                target: initialTarget
+            ))
+
+            try ExerciseSessionMetadataStore.save(ExerciseSessionMetadata(
+                sessionID: sessionID,
+                exerciseTypeName: exerciseTypeName,
+                sessionCreatedAt: now,
+                scheduledExerciseStart: scheduledExerciseStart,
+                preExerciseStart: plannedPreStart,
+                actualExerciseStart: initialPhase == .duringExercise ? initialStart : nil,
+                preExerciseEnabled: preExerciseEnabled,
+                preExerciseDurationMinutes: preExerciseDuration,
+                preExerciseSettings: ExerciseSessionMetadata.PhaseSettings(
+                    basalPercentage: preExerciseBasalPercentage,
+                    target: preExerciseTarget,
+                    suppressSMB: preExerciseSuppressSMB
+                ),
+                exerciseSettings: ExerciseSessionMetadata.PhaseSettings(
+                    basalPercentage: exerciseBasalPercentage,
+                    target: exerciseTarget,
+                    suppressSMB: exerciseSuppressSMB
+                ),
+                postExerciseEnabled: postExerciseEnabled,
+                postExerciseBasalPercentage: postExerciseBasalPercentage,
+                postExerciseTarget: postExerciseTarget,
+                postExerciseSuppressSMB: postExerciseSuppressSMB,
+                announcementSettings: ExerciseAnnouncementSettings(
+                    enabled: announceGlucoseDuringExercise,
+                    intervalMinutes: announcementInterval,
+                    includeTrend: announcementIncludeTrend,
+                    includeRateOfChange: announcementIncludeRateOfChange,
+                    urgentAnnouncementsEnabled: announcementUrgentEnabled,
+                    lowThresholdMgdl: announcementLowThreshold,
+                    highThresholdMgdl: announcementHighThreshold,
+                    units: units,
+                    announcementsMade: 0
+                )
+            ))
+            debugPrint(
+                "ExerciseOverride session \(sessionID) created phase=\(initialPhase.rawValue) scheduled=\(scheduledExerciseStart)"
+            )
+            ExerciseGlucoseAnnouncementManager.shared.startMonitoring()
 
             await resetExerciseModeState()
             setupScheduledExerciseOverridesArray()
@@ -352,24 +417,31 @@ extension Adjustments.StateModel {
             }
 
             let now = Date()
-            if let preStartedAt = preExerciseOverride.date {
-                preExerciseOverride.duration = Decimal(max(1, now.timeIntervalSince(preStartedAt) / 60)) as NSDecimalNumber
+            if let preStartedAt = preExerciseOverride.date,
+               let metadata = ExerciseSessionMetadataStore.load(sessionID: sessionID)
+            {
+                let settings = metadata.exerciseSettings
+                preExerciseOverride.name = OverrideStored.exerciseOverrideName(
+                    type: preExerciseOverride.exerciseTypeName ?? metadata.exerciseTypeName,
+                    phase: .duringExercise
+                )
+                preExerciseOverride.date = now
+                preExerciseOverride.duration = 2160
+                preExerciseOverride.percentage = settings?.basalPercentage ?? exerciseBasalPercentage
+                preExerciseOverride.smbIsOff = settings?.suppressSMB ?? exerciseSuppressSMB
+                preExerciseOverride.target = (settings?.target ?? exerciseTarget) as NSDecimalNumber
             }
             preExerciseOverride.isUploadedToNS = false
-
-            let fetchRequest: NSFetchRequest<OverrideStored> = OverrideStored.fetchRequest()
-            fetchRequest.predicate = NSPredicate(format: "id == %@", sessionID)
-            let sessionOverrides = try viewContext.fetch(fetchRequest)
-
-            for sessionOverride in sessionOverrides where sessionOverride.exercisePhase == .duringExercise {
-                sessionOverride.date = now
-                sessionOverride.isUploadedToNS = false
+            ExerciseSessionMetadataStore.update(sessionID: sessionID) {
+                $0.actualExerciseStart = now
             }
+            debugPrint("ExerciseOverride session \(sessionID) manual-start at \(now)")
 
             guard viewContext.hasChanges else { return }
             try viewContext.save()
             setupScheduledExerciseOverridesArray()
             updateLatestOverrideConfiguration()
+            ExerciseGlucoseAnnouncementManager.shared.startMonitoring()
         } catch {
             debugPrint(
                 "\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to start Exercise Override early: \(error)"
@@ -410,13 +482,13 @@ extension Adjustments.StateModel {
             id: sessionID,
             overrideTarget: true,
             target: target,
-            advancedSettings: phase == .duringExercise ? postExerciseEnabled : false,
-            isfAndCr: phase == .duringExercise ? postExerciseSuppressSMB : false,
+            advancedSettings: false,
+            isfAndCr: false,
             isf: false,
             cr: false,
             smbIsScheduledOff: false,
-            start: phase == .duringExercise ? Decimal(postExerciseBasalPercentage) : sensitivityPercent,
-            end: phase == .duringExercise ? postExerciseTarget : Decimal(decayType.rawValue),
+            start: sensitivityPercent,
+            end: Decimal(decayType.rawValue),
             smbMinutes: defaultSmbMinutes,
             uamMinutes: defaultUamMinutes
         )
@@ -442,6 +514,7 @@ extension Adjustments.StateModel {
     func setupScheduledExerciseOverridesArray() {
         Task {
             do {
+                await advanceExerciseSessionsIfNeeded()
                 let ids = try await overrideStorage.fetchScheduledExerciseOverrides()
                 await updateScheduledExerciseOverridesArray(with: ids)
             } catch {
@@ -450,6 +523,64 @@ extension Adjustments.StateModel {
                     "\(DebuggingIdentifiers.failed) Failed to setup scheduled exercise overrides: \(error)"
                 )
             }
+        }
+    }
+
+    @MainActor func advanceExerciseSessionsIfNeeded() async {
+        do {
+            let request: NSFetchRequest<OverrideStored> = OverrideStored.fetchRequest()
+            request.predicate = NSPredicate(
+                format: "enabled == %@ AND name BEGINSWITH %@",
+                true as NSNumber,
+                OverrideStored.exerciseOverrideName + ":"
+            )
+            let overrides = try viewContext.fetch(request)
+            let now = Date()
+
+            for override in overrides {
+                guard let sessionID = override.id,
+                      var metadata = ExerciseSessionMetadataStore.load(sessionID: sessionID)
+                else { continue }
+
+                switch metadata.state(at: now) {
+                case .exerciseActive where override.exercisePhase == .preExercise:
+                    let settings = metadata.exerciseSettings
+                    override.name = OverrideStored.exerciseOverrideName(
+                        type: override.exerciseTypeName ?? metadata.exerciseTypeName,
+                        phase: .duringExercise
+                    )
+                    override.date = metadata.scheduledExerciseStart ?? now
+                    override.duration = 2160
+                    override.percentage = settings?.basalPercentage ?? exerciseBasalPercentage
+                    override.smbIsOff = settings?.suppressSMB ?? exerciseSuppressSMB
+                    override.target = (settings?.target ?? exerciseTarget) as NSDecimalNumber
+                    override.isUploadedToNS = false
+                    metadata.actualExerciseStart = override.date
+                    try? ExerciseSessionMetadataStore.save(metadata)
+                    debugPrint("ExerciseOverride session \(sessionID) auto-start at \(override.date ?? now)")
+
+                case .exerciseActive where override.exercisePhase == .duringExercise && metadata.actualExerciseStart == nil:
+                    metadata.actualExerciseStart = override.date ?? now
+                    try? ExerciseSessionMetadataStore.save(metadata)
+                    debugPrint("ExerciseOverride session \(sessionID) marked active at \(metadata.actualExerciseStart ?? now)")
+
+                case .completed where override.exercisePhase == .postExercise:
+                    override.enabled = false
+                    override.isUploadedToNS = false
+                    debugPrint("ExerciseOverride session \(sessionID) recovery expired")
+
+                default:
+                    break
+                }
+            }
+
+            if viewContext.hasChanges {
+                try viewContext.save()
+            }
+        } catch {
+            debugPrint(
+                "\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to advance Exercise Override sessions: \(error)"
+            )
         }
     }
 
@@ -498,6 +629,33 @@ extension Adjustments.StateModel {
                 sessionOverride.enabled = false
                 sessionOverride.isUploadedToNS = false
             }
+            if let sessionID {
+                let cancelledAt = Date()
+                ExerciseSessionMetadataStore.update(sessionID: sessionID) {
+                    $0.cancelledAt = cancelledAt
+                    if $0.actualExerciseStart != nil, $0.actualExerciseEnd == nil {
+                        $0.actualExerciseEnd = cancelledAt
+                    }
+                    $0.recoverySkippedReason = "cancelled"
+                }
+                if let activeExercise = sessionOverrides.first(where: { $0.exercisePhase == .duringExercise && $0.date != nil }) {
+                    let cancelledDurationMinutes = max(0, cancelledAt.timeIntervalSince(activeExercise.date ?? cancelledAt) / 60)
+                    activeExercise.duration = Decimal(max(1, cancelledDurationMinutes)) as NSDecimalNumber
+                    try? createExerciseReport(
+                        sessionID: sessionID,
+                        sessionOverrides: sessionOverrides,
+                        exerciseOverride: activeExercise,
+                        stopTime: cancelledAt,
+                        recoveryRecommendation: ExerciseRecoveryRecommendation(
+                            durationMinutes: 0,
+                            sensitivityPercent: 0,
+                            decayType: .linear
+                        )
+                    )
+                }
+                ExerciseGlucoseAnnouncementManager.shared.stopSpeech()
+                debugPrint("ExerciseOverride session \(sessionID) cancelled")
+            }
 
             guard viewContext.hasChanges else { return }
             try viewContext.save()
@@ -523,6 +681,7 @@ extension Adjustments.StateModel {
             let exerciseStartedAt = exerciseOverride.date ?? now
             let actualDurationMinutes = max(0, now.timeIntervalSince(exerciseStartedAt) / 60)
             exerciseOverride.duration = Decimal(max(1, actualDurationMinutes)) as NSDecimalNumber
+            exerciseOverride.enabled = false
 
             let fetchRequest: NSFetchRequest<OverrideStored> = OverrideStored.fetchRequest()
             fetchRequest.predicate = NSPredicate(format: "id == %@", sessionID)
@@ -533,15 +692,39 @@ extension Adjustments.StateModel {
                 sessionOverride.isUploadedToNS = false
             }
             exerciseOverride.isUploadedToNS = false
+            ExerciseGlucoseAnnouncementManager.shared.stopSpeech()
 
-            let shouldCreateRecovery = exerciseOverride.advancedSettings
-            let recoveryBasalPercentage = exerciseOverride.start?.doubleValue ?? postExerciseBasalPercentage
-            let recoveryTarget = exerciseOverride.end?.decimalValue ?? postExerciseTarget
-            let recoverySuppressSMB = exerciseOverride.isfAndCr
+            let metadata = ExerciseSessionMetadataStore.load(sessionID: sessionID)
+            let shouldCreateRecovery = metadata?.postExerciseEnabled ?? postExerciseEnabled
+            let recoveryBasalPercentage = metadata?.postExerciseBasalPercentage ?? postExerciseBasalPercentage
+            let recoveryTarget = metadata?.postExerciseTarget ?? postExerciseTarget
+            let recoverySuppressSMB = metadata?.postExerciseSuppressSMB ?? postExerciseSuppressSMB
 
             let recoveryRecommendation = shouldCreateRecovery
                 ? ExerciseRecoveryCalculator.recommendation(forExerciseDurationMinutes: actualDurationMinutes)
                 : ExerciseRecoveryRecommendation(durationMinutes: 0, sensitivityPercent: 0, decayType: .linear)
+
+            ExerciseSessionMetadataStore.update(sessionID: sessionID) {
+                $0.actualExerciseEnd = now
+                if recoveryRecommendation.hasRecoveryEffect {
+                    $0.recoveryStart = now
+                    $0.recoveryEnd = now.addingTimeInterval(TimeInterval(recoveryRecommendation.durationMinutes * 60))
+                    $0.recoverySkippedReason = nil
+                } else {
+                    $0.recoveryStart = nil
+                    $0.recoveryEnd = nil
+                    if !shouldCreateRecovery {
+                        $0.recoverySkippedReason = "recoveryDisabled"
+                    } else if actualDurationMinutes < 10 {
+                        $0.recoverySkippedReason = "exerciseDurationBelowMinimum"
+                    } else {
+                        $0.recoverySkippedReason = "noRecoveryEffect"
+                    }
+                }
+            }
+            debugPrint(
+                "ExerciseOverride session \(sessionID) stopped duration=\(actualDurationMinutes) recovery=\(recoveryRecommendation.durationMinutes)m sensitivity=\(recoveryRecommendation.sensitivityPercent)"
+            )
 
             if recoveryRecommendation.hasRecoveryEffect {
                 let recoveryOverride = self.exerciseOverride(
@@ -557,6 +740,7 @@ extension Adjustments.StateModel {
                     decayType: recoveryRecommendation.decayType
                 )
                 try await overrideStorage.storeOverride(override: recoveryOverride)
+                debugPrint("ExerciseOverride session \(sessionID) recovery-start at \(now)")
             }
 
             try? createExerciseReport(
@@ -591,7 +775,8 @@ extension Adjustments.StateModel {
     ) throws {
         let preOverride = sessionOverrides.first { $0.exercisePhase == .preExercise }
         let exerciseStart = exerciseOverride.date ?? stopTime
-        let preStart = preOverride?.date
+        let metadata = ExerciseSessionMetadataStore.load(sessionID: sessionID)
+        let preStart = preOverride?.date ?? metadata?.preExerciseStart
         let actualDurationMinutes = Decimal(max(0, stopTime.timeIntervalSince(exerciseStart) / 60))
         let exerciseTypeName = exerciseOverride.exerciseTypeName ?? resolvedExerciseTypeName
 
@@ -613,10 +798,21 @@ extension Adjustments.StateModel {
             preOverride: preOverride,
             exerciseOverride: exerciseOverride
         )
-        let shouldCreateRecovery = exerciseOverride.advancedSettings
-        let recoveryBasalPercentage = exerciseOverride.start?.doubleValue ?? postExerciseBasalPercentage
-        let recoveryTarget = exerciseOverride.end?.decimalValue ?? postExerciseTarget
-        let recoverySuppressSMB = exerciseOverride.isfAndCr
+        let shouldCreateRecovery = metadata?.postExerciseEnabled ?? postExerciseEnabled
+        let recoveryBasalPercentage = metadata?.postExerciseBasalPercentage ?? postExerciseBasalPercentage
+        let recoveryTarget = metadata?.postExerciseTarget ?? postExerciseTarget
+        let recoverySuppressSMB = metadata?.postExerciseSuppressSMB ?? postExerciseSuppressSMB
+        let announcementSettings = metadata?.announcementSettings ?? ExerciseAnnouncementSettings(
+            enabled: announceGlucoseDuringExercise,
+            intervalMinutes: announcementInterval,
+            includeTrend: announcementIncludeTrend,
+            includeRateOfChange: announcementIncludeRateOfChange,
+            urgentAnnouncementsEnabled: announcementUrgentEnabled,
+            lowThresholdMgdl: announcementLowThreshold,
+            highThresholdMgdl: announcementHighThreshold,
+            units: units,
+            announcementsMade: 0
+        )
 
         let report = ExerciseReport(
             id: sessionID,
@@ -629,7 +825,8 @@ extension Adjustments.StateModel {
             actualExerciseDurationMinutes: actualDurationMinutes,
             startedAutomatically: preOverride?.activeUntilDate() == exerciseStart,
             startedEarly: preOverride?.activeUntilDate() != nil && preOverride?.activeUntilDate() != exerciseStart,
-            wasCancelled: actualDurationMinutes < 10,
+            wasCancelled: metadata?.cancelledAt != nil,
+            recoverySkippedReason: metadata?.recoverySkippedReason,
             recoveryDurationCalculatedMinutes: recoveryRecommendation.durationMinutes,
             recoverySensitivityAdjustmentCalculated: recoveryRecommendation.sensitivityPercent,
             decayModelUsed: recoveryRecommendation.decayType,
@@ -638,6 +835,12 @@ extension Adjustments.StateModel {
                     basalPercentage: $0.percentage,
                     target: $0.target?.decimalValue,
                     smbSuppressed: $0.smbIsOff
+                )
+            } ?? metadata?.preExerciseSettings.map {
+                ExerciseReport.PhaseConfiguration(
+                    basalPercentage: $0.basalPercentage,
+                    target: $0.target,
+                    smbSuppressed: $0.suppressSMB
                 )
             },
             exerciseConfiguration: ExerciseReport.PhaseConfiguration(
@@ -650,6 +853,14 @@ extension Adjustments.StateModel {
                 target: recoveryTarget,
                 smbSuppressed: recoverySuppressSMB
             ) : nil,
+            announcementStats: ExerciseReport.AnnouncementStats(
+                announceGlucoseEnabled: announcementSettings.enabled,
+                announcementInterval: announcementSettings.intervalMinutes,
+                includeTrend: announcementSettings.includeTrend,
+                includeRateOfChange: announcementSettings.includeRateOfChange,
+                urgentAnnouncementsEnabled: announcementSettings.urgentAnnouncementsEnabled,
+                numberOfAnnouncementsMade: announcementSettings.announcementsMade
+            ),
             glucoseStats: glucoseStats,
             insulinStats: insulinStats
         )
@@ -700,9 +911,11 @@ extension Adjustments.StateModel {
             basalDeliveredDuringPreExercise: nil,
             basalDeliveredDuringExercise: nil,
             basalDeliveredDuringRecovery: nil,
-            preExerciseSMBSuppressed: preOverride?.smbIsOff ?? false,
+            preExerciseSMBSuppressed: preOverride?.smbIsOff ?? ExerciseSessionMetadataStore
+                .load(sessionID: exerciseOverride.id ?? "")?.preExerciseSettings?.suppressSMB ?? false,
             exerciseSMBSuppressed: exerciseOverride.smbIsOff,
-            recoverySMBSuppressed: exerciseOverride.isfAndCr,
+            recoverySMBSuppressed: ExerciseSessionMetadataStore
+                .load(sessionID: exerciseOverride.id ?? "")?.postExerciseSuppressSMB ?? postExerciseSuppressSMB,
             bolusesDeliveredDuringSession: totalBoluses
         )
     }
@@ -785,6 +998,7 @@ extension Adjustments.StateModel {
             do {
                 guard let self = self else { return }
 
+                await self.advanceExerciseSessionsIfNeeded()
                 let id = try await self.overrideStorage.loadLatestOverrideConfigurations(fetchLimit: 1)
 
                 // execute sequentially instead of concurrently
@@ -901,6 +1115,13 @@ extension Adjustments.StateModel {
         postExerciseBasalPercentage = 100
         postExerciseSuppressSMB = false
         postExerciseSensitivityDecayType = .linear
+        announceGlucoseDuringExercise = false
+        announcementInterval = 5
+        announcementIncludeTrend = true
+        announcementIncludeRateOfChange = false
+        announcementUrgentEnabled = true
+        announcementLowThreshold = 70
+        announcementHighThreshold = 180
     }
 
     /// Rounds a target value to the nearest step.

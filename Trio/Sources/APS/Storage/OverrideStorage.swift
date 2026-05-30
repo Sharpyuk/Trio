@@ -202,6 +202,10 @@ final class BaseOverrideStorage: @preconcurrency OverrideStorage, Injectable {
                 newOverride.end = override.end as NSDecimalNumber
             } else {
                 newOverride.smbIsScheduledOff = false
+                if override.name.hasSuffix(OverrideStored.exerciseNameSeparator + ExercisePhase.postExercise.title) {
+                    newOverride.start = override.start as NSDecimalNumber
+                    newOverride.end = override.end as NSDecimalNumber
+                }
             }
 
             guard self.context.hasChanges else { return }

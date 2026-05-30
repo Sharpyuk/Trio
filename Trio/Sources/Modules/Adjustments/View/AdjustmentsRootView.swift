@@ -259,6 +259,16 @@ extension Adjustments {
                                 Task {
                                     await state.stopExerciseNow(override.objectID)
                                 }
+                            },
+                            endRecovery: {
+                                Task {
+                                    await state.cancelScheduledExerciseOverride(override.objectID)
+                                }
+                            },
+                            cancelExercise: {
+                                Task {
+                                    await state.cancelScheduledExerciseOverride(override.objectID)
+                                }
                             }
                         )
                     } else {
@@ -531,6 +541,41 @@ struct ExerciseModeForm: View {
                 .listRowBackground(Color.chart)
 
                 Section(
+                    header: Text("Exercise announcements"),
+                    footer: Text("Announcements only run during active exercise and stop when exercise stops.")
+                ) {
+                    Toggle("Announce Glucose During Exercise", isOn: $state.announceGlucoseDuringExercise)
+
+                    if state.announceGlucoseDuringExercise {
+                        durationStepper(
+                            title: String(localized: "Announcement interval"),
+                            value: Binding(
+                                get: { Int(state.announcementInterval) },
+                                set: { state.announcementInterval = Decimal($0) }
+                            ),
+                            range: 1 ... 60,
+                            step: 1
+                        )
+                        Toggle("Include trend direction", isOn: $state.announcementIncludeTrend)
+                        Toggle("Include rate of change", isOn: $state.announcementIncludeRateOfChange)
+                        Toggle("Announce urgent changes immediately", isOn: $state.announcementUrgentEnabled)
+                        glucoseThresholdStepper(
+                            title: String(localized: "Urgent low threshold"),
+                            value: $state.announcementLowThreshold,
+                            range: 50 ... 100,
+                            step: 5
+                        )
+                        glucoseThresholdStepper(
+                            title: String(localized: "Urgent high threshold"),
+                            value: $state.announcementHighThreshold,
+                            range: 120 ... 300,
+                            step: 5
+                        )
+                    }
+                }
+                .listRowBackground(Color.chart)
+
+                Section(
                     header: Text("Post-exercise recovery"),
                     footer: Text(
                         "Recovery is calculated from the actual exercise duration when you stop exercise. Under 10 minutes creates a report without recovery sensitivity."
@@ -640,6 +685,40 @@ struct ExerciseModeForm: View {
         }
     }
 
+    @ViewBuilder private func glucoseThresholdStepper(
+        title: String,
+        value: Binding<Decimal>,
+        range: ClosedRange<Int>,
+        step: Int
+    ) -> some View {
+        Stepper(
+            value: Binding(
+                get: { Int(truncating: value.wrappedValue as NSNumber) },
+                set: { value.wrappedValue = Decimal($0) }
+            ),
+            in: range,
+            step: step
+        ) {
+            HStack {
+                Text(title)
+                Spacer()
+                Text(formattedAnnouncementGlucose(glucose: value.wrappedValue))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func formattedAnnouncementGlucose(glucose: Decimal) -> String {
+        let formattedValue: String
+        if state.units == .mgdL {
+            formattedValue = Formatter.glucoseFormatter(for: state.units)
+                .string(from: glucose as NSDecimalNumber) ?? "\(glucose)"
+        } else {
+            formattedValue = glucose.formattedAsMmolL
+        }
+        return "\(formattedValue) \(state.units.rawValue)"
+    }
+
     @ViewBuilder private func targetPicker(
         label: String,
         selection: Binding<Decimal>,
@@ -676,7 +755,11 @@ struct ExercisePhaseStatusView: View {
     let formattedTimeRemaining: (TimeInterval) -> String
     let startExerciseNow: () -> Void
     let stopExercise: () -> Void
+    let endRecovery: () -> Void
+    let cancelExercise: () -> Void
     @State private var confirmStopExercise = false
+    @State private var confirmCancelExercise = false
+    @State private var confirmEndRecovery = false
 
     private var phase: ExercisePhase {
         override.exercisePhase ?? .duringExercise
@@ -749,24 +832,66 @@ struct ExercisePhaseStatusView: View {
             .frame(height: 8)
 
             if phase == .preExercise {
-                Button {
-                    startExerciseNow()
-                } label: {
-                    Label("Start Exercise Now", systemImage: "figure.run")
+                HStack {
+                    Button {
+                        startExerciseNow()
+                    } label: {
+                        Label("Start Exercise Now", systemImage: "figure.run")
+                    }
+                    .buttonStyle(.borderless)
+
+                    Spacer()
+
+                    cancelButton
                 }
-                .buttonStyle(.borderless)
             } else if phase == .duringExercise {
-                Button(role: .destructive) {
-                    confirmStopExercise = true
-                } label: {
-                    Label("Stop Exercise", systemImage: "stop.circle")
+                HStack {
+                    Button(role: .destructive) {
+                        confirmStopExercise = true
+                    } label: {
+                        Label("Stop Exercise", systemImage: "stop.circle")
+                    }
+                    .buttonStyle(.borderless)
+                    .confirmationDialog("Stop exercise and start recovery now?", isPresented: $confirmStopExercise) {
+                        Button("Stop Exercise", role: .destructive, action: stopExercise)
+                        Button("Cancel", role: .cancel) {}
+                    }
+
+                    Spacer()
+
+                    cancelButton
                 }
-                .buttonStyle(.borderless)
-                .confirmationDialog("Stop exercise and start recovery now?", isPresented: $confirmStopExercise) {
-                    Button("Stop Exercise", role: .destructive, action: stopExercise)
-                    Button("Cancel", role: .cancel) {}
+            } else if phase == .postExercise {
+                HStack {
+                    Button(role: .destructive) {
+                        confirmEndRecovery = true
+                    } label: {
+                        Label("End Recovery", systemImage: "xmark.circle")
+                    }
+                    .buttonStyle(.borderless)
+                    .confirmationDialog("End post-exercise recovery now?", isPresented: $confirmEndRecovery) {
+                        Button("End Recovery", role: .destructive, action: endRecovery)
+                        Button("Cancel", role: .cancel) {}
+                    }
+
+                    Spacer()
+
+                    cancelButton
                 }
             }
+        }
+    }
+
+    private var cancelButton: some View {
+        Button(role: .destructive) {
+            confirmCancelExercise = true
+        } label: {
+            Label("Cancel", systemImage: "xmark")
+        }
+        .buttonStyle(.borderless)
+        .confirmationDialog("Cancel Exercise Override?", isPresented: $confirmCancelExercise) {
+            Button("Cancel Override", role: .destructive, action: cancelExercise)
+            Button("Keep Running", role: .cancel) {}
         }
     }
 
@@ -856,6 +981,9 @@ struct ExerciseReportDetailView: View {
                 row("Duration", "\(report.recoveryDurationCalculatedMinutes) min")
                 row("Sensitivity", "+\(report.recoverySensitivityAdjustmentCalculated)%")
                 row("Decay", report.decayModelUsed.title)
+                if let recoverySkippedReason = report.recoverySkippedReason {
+                    row("Skipped reason", recoverySkippedReason)
+                }
             }
 
             Section("Glucose") {
@@ -877,6 +1005,15 @@ struct ExerciseReportDetailView: View {
                 row("Pre SMB", report.insulinStats.preExerciseSMBSuppressed ? "Suppressed" : "Allowed")
                 row("Exercise SMB", report.insulinStats.exerciseSMBSuppressed ? "Suppressed" : "Allowed")
                 row("Recovery SMB", report.insulinStats.recoverySMBSuppressed ? "Suppressed" : "Allowed")
+            }
+
+            Section("Announcements") {
+                row("Enabled", report.announcementStats.announceGlucoseEnabled ? "Yes" : "No")
+                row("Interval", "\(report.announcementStats.announcementInterval) min")
+                row("Trend", report.announcementStats.includeTrend ? "Included" : "Off")
+                row("Rate of change", report.announcementStats.includeRateOfChange ? "Included" : "Off")
+                row("Urgent", report.announcementStats.urgentAnnouncementsEnabled ? "Enabled" : "Off")
+                row("Announcements made", "\(report.announcementStats.numberOfAnnouncementsMade)")
             }
 
             Section("Export") {

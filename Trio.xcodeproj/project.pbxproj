@@ -545,6 +545,7 @@
 		DD1745172C54389F00211FAC /* FeatureSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD1745162C54389F00211FAC /* FeatureSettingsView.swift */; };
 		DD1745192C543B5700211FAC /* NotificationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD1745182C543B5700211FAC /* NotificationsView.swift */; };
 		DD17451D2C543C5F00211FAC /* ServicesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD17451C2C543C5F00211FAC /* ServicesView.swift */; };
+		DD7A10022F76000100E00001 /* ExerciseGlucoseAnnouncementManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD7A10012F76000100E00001 /* ExerciseGlucoseAnnouncementManager.swift */; };
 		DD1745202C55523E00211FAC /* SMBSettingsDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD17451F2C55523E00211FAC /* SMBSettingsDataFlow.swift */; };
 		DD1745222C55524800211FAC /* SMBSettingsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD1745212C55524800211FAC /* SMBSettingsProvider.swift */; };
 		DD1745242C55526000211FAC /* SMBSettingsStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD1745232C55526000211FAC /* SMBSettingsStateModel.swift */; };
@@ -1417,6 +1418,7 @@
 		DD1745162C54389F00211FAC /* FeatureSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureSettingsView.swift; sourceTree = "<group>"; };
 		DD1745182C543B5700211FAC /* NotificationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsView.swift; sourceTree = "<group>"; };
 		DD17451C2C543C5F00211FAC /* ServicesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServicesView.swift; sourceTree = "<group>"; };
+		DD7A10012F76000100E00001 /* ExerciseGlucoseAnnouncementManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseGlucoseAnnouncementManager.swift; sourceTree = "<group>"; };
 		DD17451F2C55523E00211FAC /* SMBSettingsDataFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SMBSettingsDataFlow.swift; sourceTree = "<group>"; };
 		DD1745212C55524800211FAC /* SMBSettingsProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SMBSettingsProvider.swift; sourceTree = "<group>"; };
 		DD1745232C55526000211FAC /* SMBSettingsStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SMBSettingsStateModel.swift; sourceTree = "<group>"; };
@@ -2134,6 +2136,7 @@
 				B015AFE22E500000000D7351 /* BolusSafety */,
 				3862CC2C2743F9DC00BF832C /* Calendar */,
 				E592A37E2CEEC046009A472C /* ContactImage */,
+				DD7A10012F76000100E00001 /* ExerciseGlucoseAnnouncementManager.swift */,
 				F90692A8274B7A980037068D /* HealthKit */,
 				3BF85FE22E427312000D7351 /* IOB */,
 				6B1A8D2C2B156EC100E76752 /* LiveActivity */,
@@ -4591,6 +4594,7 @@
 				190EBCC829FF13AA00BA767D /* UserInterfaceSettingsStateModel.swift in Sources */,
 				3BF85FE32E427312000D7351 /* IOBService.swift in Sources */,
 				B015AFE32E500000000D7351 /* BolusSafetyValidator.swift in Sources */,
+				DD7A10022F76000100E00001 /* ExerciseGlucoseAnnouncementManager.swift in Sources */,
 				DDF847EA2C5DABAC0049BB3B /* WatchConfigGarminView.swift in Sources */,
 				38BF021F25E7F0DE00579895 /* DeviceDataManager.swift in Sources */,
 				BD4E1A7A2D3681B700D21626 /* GlucoseTargetSetup.swift in Sources */,

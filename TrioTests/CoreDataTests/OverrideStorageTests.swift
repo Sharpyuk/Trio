@@ -496,6 +496,7 @@ import Testing
             startedAutomatically: true,
             startedEarly: false,
             wasCancelled: false,
+            recoverySkippedReason: nil,
             recoveryDurationCalculatedMinutes: 240,
             recoverySensitivityAdjustmentCalculated: 10,
             decayModelUsed: .linear,
@@ -513,6 +514,14 @@ import Testing
                 basalPercentage: 100,
                 target: 108,
                 smbSuppressed: false
+            ),
+            announcementStats: ExerciseReport.AnnouncementStats(
+                announceGlucoseEnabled: true,
+                announcementInterval: 5,
+                includeTrend: true,
+                includeRateOfChange: false,
+                urgentAnnouncementsEnabled: true,
+                numberOfAnnouncementsMade: 2
             ),
             glucoseStats: ExerciseReport.GlucoseStats(
                 bgAtPreExerciseStart: 100,
@@ -547,7 +556,58 @@ import Testing
         #expect(object?["exerciseType"] as? String == ExerciseType.run.rawValue)
         #expect(object?["glucoseStats"] != nil)
         #expect(object?["insulinStats"] != nil)
+        #expect(object?["announcementStats"] != nil)
 
         try? FileManager.default.removeItem(at: url)
+    }
+
+    @Test("Exercise glucose trend classification") func testExerciseGlucoseTrendClassification() {
+        #expect(ExerciseGlucoseTrend.classify(rateMgdlPerMinute: -2) == .fallingFast)
+        #expect(ExerciseGlucoseTrend.classify(rateMgdlPerMinute: -1) == .fallingSlowly)
+        #expect(ExerciseGlucoseTrend.classify(rateMgdlPerMinute: 0) == .steady)
+        #expect(ExerciseGlucoseTrend.classify(rateMgdlPerMinute: 1) == .risingSlowly)
+        #expect(ExerciseGlucoseTrend.classify(rateMgdlPerMinute: 2) == .risingFast)
+    }
+
+    @Test(
+        "Scheduled exercise with pre window already started is pre-exercise active"
+    ) func testScheduledExerciseWithPreWindowAlreadyStartedIsActive() {
+        let now = Date()
+        let metadata = ExerciseSessionMetadata(
+            sessionID: UUID().uuidString,
+            exerciseTypeName: ExerciseType.run.rawValue,
+            sessionCreatedAt: now,
+            scheduledExerciseStart: now.addingTimeInterval(3.minutes.timeInterval),
+            preExerciseStart: now.addingTimeInterval(-57.minutes.timeInterval),
+            postExerciseEnabled: true,
+            postExerciseBasalPercentage: 100,
+            postExerciseTarget: 108,
+            postExerciseSuppressSMB: false,
+            announcementSettings: ExerciseAnnouncementSettings()
+        )
+
+        #expect(metadata.state(at: now) == .preExerciseActive)
+        #expect(metadata.state(at: now.addingTimeInterval(3.minutes.timeInterval + 1)) == .exerciseActive)
+    }
+
+    @Test("Exercise session state completes after recovery expiry") func testExerciseSessionCompletesAfterRecoveryExpiry() {
+        let now = Date()
+        let metadata = ExerciseSessionMetadata(
+            sessionID: UUID().uuidString,
+            exerciseTypeName: ExerciseType.ultraRun.rawValue,
+            sessionCreatedAt: now.addingTimeInterval(-4.hours.timeInterval),
+            scheduledExerciseStart: now.addingTimeInterval(-3.hours.timeInterval),
+            actualExerciseStart: now.addingTimeInterval(-3.hours.timeInterval),
+            actualExerciseEnd: now.addingTimeInterval(-2.hours.timeInterval),
+            recoveryStart: now.addingTimeInterval(-2.hours.timeInterval),
+            recoveryEnd: now.addingTimeInterval(-1.minutes.timeInterval),
+            postExerciseEnabled: true,
+            postExerciseBasalPercentage: 100,
+            postExerciseTarget: 108,
+            postExerciseSuppressSMB: false,
+            announcementSettings: ExerciseAnnouncementSettings()
+        )
+
+        #expect(metadata.state(at: now) == .completed)
     }
 }

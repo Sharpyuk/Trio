@@ -10792,6 +10792,16 @@
         }
       }
     },
+    "%lld min, recovery %lldh, sensitivity +%lld%%" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld min, recovery %2$lldh, sensitivity +%3$lld%%"
+          }
+        }
+      }
+    },
     "%lld x" : {
       "localizations" : {
         "bg" : {
@@ -45414,6 +45424,21 @@
         }
       }
     },
+    "Announce Glucose During Exercise" : {
+
+    },
+    "Announce urgent changes immediately" : {
+
+    },
+    "Announcement interval" : {
+
+    },
+    "Announcements" : {
+
+    },
+    "Announcements only run during active exercise and stop when exercise stops." : {
+
+    },
     "Anonymized Data Sharing" : {
       "localizations" : {
         "bg" : {
@@ -63688,6 +63713,9 @@
           }
         }
       }
+    },
+    "Cancel Exercise Override?" : {
+
     },
     "Cancel override" : {
       "localizations" : {
@@ -112304,6 +112332,12 @@
         }
       }
     },
+    "End post-exercise recovery now?" : {
+
+    },
+    "End Recovery" : {
+
+    },
     "Endpoint" : {
 
     },
@@ -115732,7 +115766,7 @@
     "Exercise" : {
 
     },
-    "Exercise duration" : {
+    "Exercise announcements" : {
 
     },
     "Exercise Mode" : {
@@ -115868,6 +115902,12 @@
       }
     },
     "Exercise Override" : {
+
+    },
+    "Exercise Reports" : {
+
+    },
+    "Exercise Session" : {
 
     },
     "Experimental" : {
@@ -116265,6 +116305,9 @@
         }
       }
     },
+    "Export" : {
+
+    },
     "Export Categories" : {
       "localizations" : {
         "bg" : {
@@ -116388,6 +116431,9 @@
           }
         }
       }
+    },
+    "Export CSV" : {
+
     },
     "Export Date" : {
       "localizations" : {
@@ -116760,6 +116806,9 @@
           }
         }
       }
+    },
+    "Export JSON" : {
+
     },
     "Export logs" : {
       "extractionState" : "manual",
@@ -144261,6 +144310,12 @@
         }
       }
     },
+    "Include rate of change" : {
+
+    },
+    "Include trend direction" : {
+
+    },
     "Increase sensitivity when glucose is above target if a manual Temp Target > %@ %@ is set." : {
       "localizations" : {
         "bg" : {
@@ -150693,6 +150748,9 @@
           }
         }
       }
+    },
+    "Keep Running" : {
+
     },
     "Keep these turned ON in your phone’s settings to ensure you receive Trio Notifications, Critical Alerts, and Time Sensitive Notifications." : {
       "localizations" : {
@@ -178780,6 +178838,9 @@
         }
       }
     },
+    "No exercise reports yet" : {
+
+    },
     "No Glucose Alarm active" : {
       "comment" : "No Glucose Alarm active",
       "localizations" : {
@@ -192891,6 +192952,9 @@
         }
       }
     },
+    "Override Start Time" : {
+
+    },
     "Override Target" : {
       "localizations" : {
         "bg" : {
@@ -197081,9 +197145,6 @@
           }
         }
       }
-    },
-    "Planned duration" : {
-
     },
     "Please authorize notifications by tapping 'Open iOS Settings' > 'Notifications' and enable 'Allow Notifications' for 'Notification Center' and 'Banners' Alerts." : {
       "localizations" : {
@@ -207793,7 +207854,10 @@
     "recovery" : {
 
     },
-    "Recovery duration" : {
+    "Recovery" : {
+
+    },
+    "Recovery is calculated from the actual exercise duration when you stop exercise. Under 10 minutes creates a report without recovery sensitivity." : {
 
     },
     "Red = Below Range" : {
@@ -218373,15 +218437,6 @@
         }
       }
     },
-    "Sensitivity decay" : {
-
-    },
-    "Sensitivity increase" : {
-
-    },
-    "Sensitivity increase is applied only during recovery and expires automatically." : {
-
-    },
     "Sensitivity Limits" : {
       "comment" : "A label displayed above a section explaining the sensitivity limits of temp targets.",
       "localizations" : {
@@ -218755,6 +218810,9 @@
           }
         }
       }
+    },
+    "Sensitivity uses automatic linear decay based on completed exercise duration." : {
+
     },
     "Sensor Age" : {
       "extractionState" : "manual",
@@ -220709,6 +220767,9 @@
           }
         }
       }
+    },
+    "Session" : {
+
     },
     "Set a custom time for peak insulin effect." : {
       "comment" : "Mini Hint for Insulin Peak Time",
@@ -231773,6 +231834,9 @@
           }
         }
       }
+    },
+    "Start Exercise Now" : {
+
     },
     "Start Exercise Override" : {
 
@@ -276064,6 +276128,12 @@
           }
         }
       }
+    },
+    "Urgent high threshold" : {
+
+    },
+    "Urgent low threshold" : {
+
     },
     "URL" : {
       "localizations" : {

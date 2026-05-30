@@ -6,6 +6,9 @@ extension Home.StateModel {
     func setupOverrides() {
         Task {
             do {
+                await MainActor.run {
+                    ExerciseGlucoseAnnouncementManager.shared.evaluate()
+                }
                 let ids = try await self.fetchOverrides()
                 let overrideObjects: [OverrideStored] = try await CoreDataStack.shared
                     .getNSManagedObject(with: ids, context: viewContext)
@@ -90,6 +93,15 @@ extension Home.StateModel {
                     sessionOverride.enabled = false
                     sessionOverride.isUploadedToNS = false
                 }
+                ExerciseSessionMetadataStore.update(sessionID: sessionID) {
+                    $0.cancelledAt = Date()
+                    if $0.actualExerciseStart != nil, $0.actualExerciseEnd == nil {
+                        $0.actualExerciseEnd = Date()
+                    }
+                    $0.recoverySkippedReason = "cancelled"
+                }
+                ExerciseGlucoseAnnouncementManager.shared.stopSpeech()
+                debugPrint("ExerciseOverride session \(sessionID) cancelled from Home")
             } else {
                 profileToCancel.enabled = false
             }
@@ -108,7 +120,7 @@ extension Home.StateModel {
     /// We can safely pass the NSManagedObject  as we are doing everything on the Main Actor
     @MainActor func saveToOverrideRunStored(object: OverrideStored) async {
         let newOverrideRunStored = OverrideRunStored(context: viewContext)
-        newOverrideRunStored.id = UUID()
+        newOverrideRunStored.id = object.exercisePhase == .inactive ? UUID() : (UUID(uuidString: object.id ?? "") ?? UUID())
         newOverrideRunStored.name = object.name
         newOverrideRunStored.startDate = object.date ?? .distantPast
         newOverrideRunStored.endDate = Date()

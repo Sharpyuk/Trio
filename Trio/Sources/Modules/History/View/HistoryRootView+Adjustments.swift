@@ -4,6 +4,12 @@ import SwiftUI
 extension History.RootView {
     var adjustmentsList: some View {
         List {
+            NavigationLink {
+                ExerciseReportsListView()
+            } label: {
+                Label("Exercise Reports", systemImage: "figure.run")
+            }
+
             HStack {
                 Text("Adjustment").foregroundStyle(.secondary)
                 Spacer()
@@ -30,6 +36,7 @@ extension History.RootView {
                 startDate: override.startDate ?? Date(),
                 endDate: override.endDate ?? Date(),
                 target: override.target?.decimalValue,
+                exerciseSessionID: exerciseSessionID(for: override),
                 type: .override
             )
         }
@@ -41,6 +48,7 @@ extension History.RootView {
                 startDate: tempTarget.startDate ?? Date(),
                 endDate: tempTarget.endDate ?? Date(),
                 target: tempTarget.target?.decimalValue,
+                exerciseSessionID: nil,
                 type: .tempTarget
             )
         }
@@ -60,6 +68,7 @@ extension History.RootView {
         let startDate: Date
         let endDate: Date
         let target: Decimal?
+        let exerciseSessionID: String?
         let type: AdjustmentType
     }
 
@@ -87,6 +96,18 @@ extension History.RootView {
     }
 
     @ViewBuilder fileprivate func adjustmentView(for item: AdjustmentItem) -> some View {
+        if let exerciseSessionID = item.exerciseSessionID {
+            NavigationLink {
+                exerciseAdjustmentDestination(sessionID: exerciseSessionID, item: item)
+            } label: {
+                adjustmentRowContent(for: item)
+            }
+        } else {
+            adjustmentRowContent(for: item)
+        }
+    }
+
+    @ViewBuilder fileprivate func adjustmentRowContent(for item: AdjustmentItem) -> some View {
         let formattedDates =
             "\(Formatter.dateFormatter.string(from: item.startDate)) - \(Formatter.dateFormatter.string(from: item.endDate))"
 
@@ -129,5 +150,43 @@ extension History.RootView {
             }
         }
         .padding(.vertical, 8)
+    }
+
+    @ViewBuilder fileprivate func exerciseAdjustmentDestination(sessionID: String, item: AdjustmentItem) -> some View {
+        if let report = ExerciseReportStore.loadReport(sessionID: sessionID) {
+            ExerciseReportDetailView(report: report)
+        } else {
+            List {
+                Section("Exercise Session") {
+                    row("Session ID", sessionID)
+                    row("Name", item.name)
+                    row("Start", Formatter.dateFormatter.string(from: item.startDate))
+                    row("End", Formatter.dateFormatter.string(from: item.endDate))
+                    row("Report", "Not created yet")
+                }
+            }
+            .navigationTitle("Exercise Session")
+        }
+    }
+
+    fileprivate func exerciseSessionID(for overrideRun: OverrideRunStored) -> String? {
+        if let override = overrideRun.override, override.exercisePhase != .inactive {
+            return override.id ?? overrideRun.id?.uuidString
+        }
+
+        guard overrideRun.name?.localizedCaseInsensitiveContains("Exercise Override") == true else {
+            return nil
+        }
+        return overrideRun.id?.uuidString
+    }
+
+    fileprivate func row(_ title: String, _ value: String) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            Text(value)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.trailing)
+        }
     }
 }

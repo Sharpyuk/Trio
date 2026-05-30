@@ -152,6 +152,7 @@ extension Home {
         }
 
         override func subscribe() {
+            ExerciseGlucoseAnnouncementManager.shared.startMonitoring()
             coreDataPublisher =
                 changedObjectsOnManagedObjectContextDidSavePublisher()
                     .receive(on: queue)
