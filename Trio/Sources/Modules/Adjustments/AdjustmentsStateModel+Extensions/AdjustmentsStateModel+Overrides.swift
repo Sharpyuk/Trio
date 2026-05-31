@@ -193,6 +193,45 @@ extension Adjustments.StateModel {
         }
     }
 
+    @MainActor func reconcileStaleExerciseRecoveryReports(now: Date = Date()) {
+        do {
+            let fetchRequest: NSFetchRequest<OverrideStored> = OverrideStored.fetchRequest()
+            fetchRequest.predicate = NSPredicate(format: "enabled == %@", true as NSNumber)
+            let activeExerciseSessionIDs = Set(
+                try viewContext.fetch(fetchRequest)
+                    .filter(\.isExerciseMode)
+                    .compactMap(\.id)
+            )
+
+            for report in ExerciseReportStore.loadReports() {
+                guard report.actualRecoveryEndTime == nil,
+                      report.recoveryDurationCalculatedMinutes > 0,
+                      !activeExerciseSessionIDs.contains(report.id)
+                else {
+                    continue
+                }
+
+                let calculatedRecoveryEnd = report.exerciseStopTime.addingTimeInterval(
+                    TimeInterval(report.recoveryDurationCalculatedMinutes * 60)
+                )
+                guard calculatedRecoveryEnd > now else { continue }
+
+                try? ExerciseReportStore.updateReport(sessionID: report.id) { updatedReport in
+                    updatedReport.actualRecoveryEndTime = now
+                }
+                ExerciseSessionMetadataStore.update(sessionID: report.id) { metadata in
+                    if metadata.recoveryEnd == nil || metadata.recoveryEnd! > now {
+                        metadata.recoveryEnd = now
+                    }
+                }
+            }
+        } catch {
+            debugPrint(
+                "\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to reconcile stale Exercise recovery reports: \(error)"
+            )
+        }
+    }
+
     // MARK: - Enact Overrides
 
     /// Enacts an Override Preset by enabling it and disabling others.
@@ -696,6 +735,8 @@ extension Adjustments.StateModel {
 
     @MainActor func advanceExerciseSessionsIfNeeded() async {
         do {
+            reconcileStaleExerciseRecoveryReports()
+
             let request: NSFetchRequest<OverrideStored> = OverrideStored.fetchRequest()
             let sessionIDs = ExerciseSessionMetadataStore.visibleSessionIDs()
             request.predicate = sessionIDs.isEmpty
@@ -758,6 +799,7 @@ extension Adjustments.StateModel {
             }
             if changed {
                 Foundation.NotificationCenter.default.post(name: .didUpdateOverrideConfiguration, object: nil)
+                reconcileStaleExerciseRecoveryReports(now: now)
             }
         } catch {
             debugPrint(
