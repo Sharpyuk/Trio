@@ -103,6 +103,7 @@ extension Adjustments {
         var announcementHighThreshold: Decimal = 180
         var exerciseGuardrailSettings = ExerciseGuardrailSettings()
         var exerciseActivityPresets: [ExerciseActivityPreset] = ExerciseActivityPresetStore.loadPresets()
+        var exercisePresetName = ""
 
         // Core Data
         let coredataContext = CoreDataStack.shared.newTaskContext()

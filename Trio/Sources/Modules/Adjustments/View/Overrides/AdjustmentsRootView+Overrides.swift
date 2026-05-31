@@ -12,9 +12,12 @@ extension Adjustments.RootView {
         if state.scheduledExerciseOverrides.isNotEmpty {
             scheduledExerciseModes
         }
+        if state.exerciseActivityPresets.isNotEmpty {
+            exerciseOverridePresets
+        }
         if state.overridePresets.isNotEmpty {
             overridePresets
-        } else {
+        } else if state.exerciseActivityPresets.isEmpty {
             defaultText
         }
     }
@@ -37,7 +40,7 @@ extension Adjustments.RootView {
                     },
                     endRecovery: {
                         Task {
-                            await state.cancelScheduledExerciseOverride(exerciseOverride.objectID)
+                            await state.endExerciseRecovery(exerciseOverride.objectID)
                         }
                     },
                     cancelExercise: {
@@ -50,6 +53,41 @@ extension Adjustments.RootView {
             .listRowBackground(Color.chart)
         } header: {
             Text("Exercise Override")
+        }
+    }
+
+    var exerciseOverridePresets: some View {
+        Section {
+            ForEach(state.exerciseActivityPresets) { preset in
+                Button {
+                    state.applyExerciseActivityPreset(preset)
+                    showExerciseModeCreationSheet = true
+                } label: {
+                    HStack {
+                        Image(systemName: preset.icon)
+                            .frame(width: 24)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(preset.activityTypeName)
+                                .foregroundStyle(.primary)
+                            Text(exercisePresetSummary(preset))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                    }
+                }
+                .contextMenu {
+                    exercisePresetActions(for: preset)
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    exercisePresetActions(for: preset)
+                }
+            }
+            .listRowBackground(Color.chart)
+        } header: {
+            Text("Exercise Override Presets")
+        } footer: {
+            Text("Tap a saved exercise preset to review its settings, then start immediately or schedule it for later.")
         }
     }
 
@@ -114,6 +152,34 @@ extension Adjustments.RootView {
                 Text("Swipe left to edit or delete an override preset. Hold, drag and drop to reorder a preset.")
             }
         }
+    }
+
+    @ViewBuilder private func exercisePresetActions(for preset: ExerciseActivityPreset) -> some View {
+        let isBuiltIn = ExerciseActivityPresetStore.builtInPresets.contains { $0.id == preset.id }
+        if !isBuiltIn {
+            Button(role: .destructive) {
+                state.deleteExerciseActivityPreset(preset)
+            } label: {
+                Label("Delete", systemImage: "trash.fill")
+            }
+        }
+    }
+
+    private func exercisePresetSummary(_ preset: ExerciseActivityPreset) -> String {
+        var labels = [
+            "pre \(Int(truncating: NSDecimalNumber(decimal: preset.preExerciseDuration)))m",
+            "basal \(Int(preset.exerciseBasalPercent))%",
+            preset.exerciseSMBSuppressed ? "SMB off" : "SMB allowed",
+            preset.announceGlucoseEnabled ? "announce on" : "announce off"
+        ]
+
+        if preset.guardrailSettings.enabled {
+            labels.append("guardrails \(preset.guardrailSettings.normalizedMode.title.lowercased())")
+        } else {
+            labels.append("guardrails off")
+        }
+        labels.append("timeout off")
+        return labels.joined(separator: ", ")
     }
 
     private func requestOverridePresetActivation(_ preset: OverrideStored) {

@@ -115946,6 +115946,9 @@
     "Exercise Override" : {
 
     },
+    "Exercise Override Presets" : {
+
+    },
     "Exercise Reports" : {
 
     },
@@ -150810,9 +150813,6 @@
       }
     },
     "Keep Override" : {
-
-    },
-    "Keep Running" : {
 
     },
     "Keep these turned ON in your phone’s settings to ensure you receive Trio Notifications, Critical Alerts, and Time Sensitive Notifications." : {
@@ -199508,6 +199508,9 @@
         }
       }
     },
+    "Preset name" : {
+
+    },
     "Presets" : {
       "localizations" : {
         "bg" : {
@@ -213881,9 +213884,6 @@
         }
       }
     },
-    "Save Current Settings as Preset" : {
-
-    },
     "Save on Pump" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -217914,7 +217914,7 @@
         }
       }
     },
-    "Selecting an activity type loads its saved defaults. Starting or scheduling exercise remembers the current settings for that type." : {
+    "Selecting an activity type loads its saved defaults. Use Save as Preset to reuse the current configuration later." : {
 
     },
     "Selection" : {
@@ -239627,6 +239627,9 @@
           }
         }
       }
+    },
+    "Tap a saved exercise preset to review its settings, then start immediately or schedule it for later." : {
+
     },
     "Tap and hold a bar in the chart to reveal more details. Swipe to scroll through time." : {
       "localizations" : {

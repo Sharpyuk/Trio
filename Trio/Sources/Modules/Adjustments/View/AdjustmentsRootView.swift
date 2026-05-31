@@ -264,7 +264,7 @@ extension Adjustments {
                             },
                             endRecovery: {
                                 Task {
-                                    await state.cancelScheduledExerciseOverride(override.objectID)
+                                    await state.endExerciseRecovery(override.objectID)
                                 }
                             },
                             cancelExercise: {
@@ -517,10 +517,11 @@ struct ExerciseModeForm: View {
 
                 Section(header: Text("Activity preset")) {
                     Text(
-                        "Selecting an activity type loads its saved defaults. Starting or scheduling exercise remembers the current settings for that type."
+                        "Selecting an activity type loads its saved defaults. Use Save as Preset to reuse the current configuration later."
                     )
                     .foregroundStyle(.secondary)
-                    Button("Save Current Settings as Preset") {
+                    TextField("Preset name", text: $state.exercisePresetName)
+                    Button("Save as Preset") {
                         state.saveCurrentExercisePreset()
                     }
                     Button("Reset Built-in Presets") {
@@ -933,9 +934,13 @@ private enum ExercisePhaseConfirmationAction: Identifiable {
         case .endRecovery:
             return String(localized: "Continue Recovery")
         case .cancelExercise:
-            return sessionState == .exerciseActive
-                ? String(localized: "Keep Running")
-                : String(localized: "Keep Override")
+            if sessionState == .exerciseActive {
+                return String(localized: "Continue Running")
+            }
+            if sessionState == .recoveryActive {
+                return String(localized: "Continue Recovery")
+            }
+            return String(localized: "Keep Override")
         }
     }
 }
@@ -947,8 +952,10 @@ struct ExercisePhaseStatusView: View {
     let stopExercise: () -> Void
     let endRecovery: () -> Void
     let cancelExercise: () -> Void
-    @State private var pendingConfirmationAction: ExercisePhaseConfirmationAction = .cancelExercise
-    @State private var isConfirmationPresented = false
+    @State private var confirmStartExercise = false
+    @State private var confirmStopExercise = false
+    @State private var confirmEndRecovery = false
+    @State private var confirmCancelExercise = false
     @State private var showSessionDetail = false
 
     private var phase: ExercisePhase {
@@ -1124,16 +1131,61 @@ struct ExercisePhaseStatusView: View {
             }
         }
         .confirmationDialog(
-            pendingConfirmationAction.title,
-            isPresented: $isConfirmationPresented,
+            ExercisePhaseConfirmationAction.startExercise.title,
+            isPresented: $confirmStartExercise,
             titleVisibility: .visible
         ) {
-            Button(pendingConfirmationAction.primaryButtonLabel, role: pendingConfirmationAction.primaryButtonRole) {
-                perform(pendingConfirmationAction)
+            Button(ExercisePhaseConfirmationAction.startExercise.primaryButtonLabel) {
+                perform(.startExercise)
             }
-            Button(pendingConfirmationAction.secondaryButtonLabel(sessionState: sessionState), role: .cancel) {}
+            Button(
+                ExercisePhaseConfirmationAction.startExercise.secondaryButtonLabel(sessionState: sessionState),
+                role: .cancel
+            ) {}
         } message: {
-            Text(pendingConfirmationAction.message)
+            Text(ExercisePhaseConfirmationAction.startExercise.message)
+        }
+        .confirmationDialog(
+            ExercisePhaseConfirmationAction.stopExercise.title,
+            isPresented: $confirmStopExercise,
+            titleVisibility: .visible
+        ) {
+            Button(ExercisePhaseConfirmationAction.stopExercise.primaryButtonLabel, role: .destructive) {
+                perform(.stopExercise)
+            }
+            Button(
+                ExercisePhaseConfirmationAction.stopExercise.secondaryButtonLabel(sessionState: sessionState),
+                role: .cancel
+            ) {}
+        } message: {
+            Text(ExercisePhaseConfirmationAction.stopExercise.message)
+        }
+        .confirmationDialog(
+            ExercisePhaseConfirmationAction.endRecovery.title,
+            isPresented: $confirmEndRecovery,
+            titleVisibility: .visible
+        ) {
+            Button(ExercisePhaseConfirmationAction.endRecovery.primaryButtonLabel, role: .destructive) {
+                perform(.endRecovery)
+            }
+            Button(ExercisePhaseConfirmationAction.endRecovery.secondaryButtonLabel(sessionState: sessionState), role: .cancel) {}
+        } message: {
+            Text(ExercisePhaseConfirmationAction.endRecovery.message)
+        }
+        .confirmationDialog(
+            ExercisePhaseConfirmationAction.cancelExercise.title,
+            isPresented: $confirmCancelExercise,
+            titleVisibility: .visible
+        ) {
+            Button(ExercisePhaseConfirmationAction.cancelExercise.primaryButtonLabel, role: .destructive) {
+                perform(.cancelExercise)
+            }
+            Button(
+                ExercisePhaseConfirmationAction.cancelExercise.secondaryButtonLabel(sessionState: sessionState),
+                role: .cancel
+            ) {}
+        } message: {
+            Text(ExercisePhaseConfirmationAction.cancelExercise.message)
         }
         .sheet(isPresented: $showSessionDetail) {
             ExerciseSessionConfigurationView(
@@ -1155,11 +1207,25 @@ struct ExercisePhaseStatusView: View {
     }
 
     private func requestConfirmation(_ action: ExercisePhaseConfirmationAction) {
-        pendingConfirmationAction = action
-        isConfirmationPresented = true
+        debugPrint(
+            "Exercise action dialog requested: action=\(action.id) objectID=\(override.objectID.uriRepresentation().absoluteString)"
+        )
+        switch action {
+        case .startExercise:
+            confirmStartExercise = true
+        case .stopExercise:
+            confirmStopExercise = true
+        case .endRecovery:
+            confirmEndRecovery = true
+        case .cancelExercise:
+            confirmCancelExercise = true
+        }
     }
 
     private func perform(_ action: ExercisePhaseConfirmationAction) {
+        debugPrint(
+            "Exercise action confirmed: action=\(action.id) objectID=\(override.objectID.uriRepresentation().absoluteString)"
+        )
         switch action {
         case .startExercise:
             startExerciseNow()

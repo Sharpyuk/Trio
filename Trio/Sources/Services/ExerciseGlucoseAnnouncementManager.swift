@@ -206,6 +206,12 @@ enum ExerciseActivityPresetStore {
         debugPrint("ExerciseOverride preset saved \(preset.activityTypeName)")
     }
 
+    static func deletePreset(id: String) {
+        let presets = loadPresets().filter { $0.id != id }
+        savePresets(presets)
+        debugPrint("ExerciseOverride preset deleted \(id)")
+    }
+
     static func resetToDefaults() {
         savePresets(builtInPresets)
     }
