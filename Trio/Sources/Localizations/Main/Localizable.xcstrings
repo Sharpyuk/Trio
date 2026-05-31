@@ -31421,9 +31421,6 @@
         }
       }
     },
-    "Add Mock Garmin Watch" : {
-
-    },
     "Add Omnipod" : {
       "comment" : "Add Omnipod pump",
       "extractionState" : "manual",
@@ -209462,9 +209459,6 @@
         }
       }
     },
-    "Remove All Devices" : {
-
-    },
     "Remove Last" : {
       "localizations" : {
         "bg" : {
@@ -227176,12 +227170,6 @@
           }
         }
       }
-    },
-    "Simulator only - for testing UI workflow" : {
-
-    },
-    "Simulator Testing" : {
-
     },
     "Skip Bolus screen after carbs" : {
       "comment" : "Do you want to show bolus screen after added carbs?",

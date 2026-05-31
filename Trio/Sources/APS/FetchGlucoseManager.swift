@@ -61,10 +61,6 @@ final class BaseFetchGlucoseManager: FetchGlucoseManager, Injectable {
 
     /// Enforce mutual exclusion on calls to glucoseStoreAndHeartDecision
     private let glucoseStoreAndHeartLock = DispatchSemaphore(value: 1)
-    @Persisted(
-        key: "BaseFetchGlucoseManager.lastLibreAutomationHeartbeatDate"
-    ) private var lastLibreAutomationHeartbeatDate: Date =
-        .distantPast
 
     var shouldSyncToRemoteService: Bool {
         guard let cgmManager = cgmManager else {
@@ -296,9 +292,12 @@ final class BaseFetchGlucoseManager: FetchGlucoseManager, Injectable {
             await exponentialSmoothingGlucose(context: context)
         }
 
-        if shouldSendAutomationHeartbeatForStoredGlucose() {
-            deviceDataManager.heartbeat(date: Date())
-        }
+        debug(
+            .deviceManager,
+            "Stored \(filtered.count) new glucose value(s); Libre read interval: \(settingsManager.settings.sanitizedLibreGlucoseReadIntervalMinutes) min"
+        )
+        debug(.deviceManager, "Calling deviceDataManager heartbeat after storing glucose")
+        deviceDataManager.heartbeat(date: Date())
 
         endBackgroundTaskSafely(&backgroundTaskID, taskName: "Glucose Store and Heartbeat Decision")
     }
@@ -341,18 +340,6 @@ final class BaseFetchGlucoseManager: FetchGlucoseManager, Injectable {
 
         let interval = settingsManager.settings.sanitizedLibreGlucoseReadIntervalMinutes
         return max(60, TimeInterval(interval * 60) - 30)
-    }
-
-    private func shouldSendAutomationHeartbeatForStoredGlucose() -> Bool {
-        guard isUsingLibreCGM else { return true }
-
-        let now = Date()
-        guard lastLibreAutomationHeartbeatDate.addingTimeInterval(5.minutes.timeInterval) < now else {
-            return false
-        }
-
-        lastLibreAutomationHeartbeatDate = now
-        return true
     }
 }
 
