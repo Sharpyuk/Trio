@@ -446,10 +446,6 @@ extension Adjustments.RootView: View {
                     pendingPresetActivation = nil
                 }
 
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                    showOverrideCheckmark = false
-                }
-
             case let .tempTarget(objectID, presetID, _):
                 await state.enactTempTargetPreset(withID: objectID)
 
@@ -458,10 +454,6 @@ extension Adjustments.RootView: View {
                     showTempTargetCheckmark = true
                     state.shouldDisplayPresetStartConfirmDialog = false
                     pendingPresetActivation = nil
-                }
-
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                    showTempTargetCheckmark = false
                 }
             }
         }

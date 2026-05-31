@@ -1308,6 +1308,7 @@ private struct HomeAddActionSheet: View {
     let resolver: Resolver
     @Binding var selectedTab: HomeAddActionTab
     @Bindable var exerciseModeState: Adjustments.StateModel
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1321,7 +1322,9 @@ private struct HomeAddActionSheet: View {
 
             switch selectedTab {
             case .treatment:
-                Treatments.RootView(resolver: resolver)
+                Treatments.RootView(resolver: resolver, onTreatmentDismiss: {
+                    dismiss()
+                })
             case .exercise:
                 ExerciseModeForm(state: exerciseModeState)
             }

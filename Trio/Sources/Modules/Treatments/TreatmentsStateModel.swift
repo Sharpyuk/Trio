@@ -19,6 +19,7 @@ extension Treatments {
         @ObservationIgnored @Injected() var glucoseStorage: GlucoseStorage!
         @ObservationIgnored @Injected() var determinationStorage: DeterminationStorage!
         @ObservationIgnored @Injected() var bolusCalculationManager: BolusCalculationManager!
+        @ObservationIgnored var onTreatmentDismiss: (@MainActor() -> Void)?
 
         var lowGlucose: Decimal = 70
         var highGlucose: Decimal = 180
@@ -181,6 +182,11 @@ extension Treatments {
             broadcaster?.unregister(BolusFailureObserver.self, observer: self)
 
             debug(.bolusState, "StateModel cleanup() finished")
+        }
+
+        @MainActor func dismissTreatmentView() {
+            hideModal()
+            onTreatmentDismiss?()
         }
 
         private func setupBolusStateConcurrently() {
@@ -444,7 +450,9 @@ extension Treatments {
                 if isInsulinGiven {
                     await handleInsulin(isExternal: externalInsulin)
                 } else {
-                    hideModal()
+                    await MainActor.run {
+                        self.dismissTreatmentView()
+                    }
                     return
                 }
 
@@ -460,7 +468,9 @@ extension Treatments {
                         showDeterminationFailureAlert = true
                         determinationFailureMessage = "Glucose data is stale"
                     }
-                    return hideModal()
+                    return await MainActor.run {
+                        self.dismissTreatmentView()
+                    }
                 }
             }
         }
@@ -716,7 +726,7 @@ extension Treatments.StateModel: DeterminationObserver, BolusFailureObserver {
             debug(.bolusState, "determinationDidUpdate fired")
             self.isAwaitingDeterminationResult = false
             if self.addButtonPressed {
-                self.hideModal()
+                self.dismissTreatmentView()
             }
         }
     }
@@ -726,7 +736,7 @@ extension Treatments.StateModel: DeterminationObserver, BolusFailureObserver {
             debug(.bolusState, "bolusDidFail fired")
             self.isAwaitingDeterminationResult = false
             if self.addButtonPressed {
-                self.hideModal()
+                self.dismissTreatmentView()
             }
         }
     }

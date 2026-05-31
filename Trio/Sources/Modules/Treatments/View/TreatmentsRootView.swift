@@ -16,8 +16,14 @@ extension Treatments {
         @FocusState private var focusedField: FocusedField?
 
         let resolver: Resolver
+        let onTreatmentDismiss: (@MainActor() -> Void)?
 
         @State var state = StateModel()
+
+        init(resolver: Resolver, onTreatmentDismiss: (@MainActor() -> Void)? = nil) {
+            self.resolver = resolver
+            self.onTreatmentDismiss = onTreatmentDismiss
+        }
 
         @State private var showPresetSheet = false
         @State private var autofocus: Bool = true
@@ -402,7 +408,7 @@ extension Treatments {
             .toolbar(content: {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
-                        state.hideModal()
+                        state.dismissTreatmentView()
                     } label: {
                         Text("Close")
                     }
@@ -421,6 +427,7 @@ extension Treatments {
                 }
             })
             .onAppear {
+                state.onTreatmentDismiss = onTreatmentDismiss
                 configureView {
                     state.isActive = true
                     Task { @MainActor in
@@ -435,6 +442,7 @@ extension Treatments {
             .onDisappear {
                 state.isActive = false
                 state.addButtonPressed = false
+                state.onTreatmentDismiss = nil
 
                 // Cancel all Combine subscriptions and unregister State from broadcaster
                 state.cleanupTreatmentState()
@@ -449,7 +457,7 @@ extension Treatments {
             }
             .alert("Error while processing Treatment", isPresented: $state.showDeterminationFailureAlert) {
                 Button("OK", role: .cancel) {
-                    state.hideModal()
+                    state.dismissTreatmentView()
                 }
             } message: {
                 Text("\(state.determinationFailureMessage)")
