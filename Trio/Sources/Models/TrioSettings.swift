@@ -25,6 +25,7 @@ struct TrioSettings: JSON, Equatable, Encodable {
     var debugOptions: Bool = false
     var cgm: CGMType = .none
     var cgmPluginIdentifier: String = ""
+    var libreGlucoseReadIntervalMinutes: Int = 5
     var uploadGlucose: Bool = true
     var useCalendar: Bool = false
     var displayCalendarIOBandCOB: Bool = false
@@ -111,6 +112,18 @@ struct TrioSettings: JSON, Equatable, Encodable {
     }
 }
 
+extension TrioSettings {
+    static let libreGlucoseReadIntervalOptions = [5, 4, 3, 2]
+
+    static func sanitizedLibreGlucoseReadIntervalMinutes(_ value: Int) -> Int {
+        min(5, max(2, value))
+    }
+
+    var sanitizedLibreGlucoseReadIntervalMinutes: Int {
+        Self.sanitizedLibreGlucoseReadIntervalMinutes(libreGlucoseReadIntervalMinutes)
+    }
+}
+
 extension TrioSettings: Decodable {
     /// Custom decoder to handle incomplete JSON and provide default values for missing fields
     init(from decoder: Decoder) throws {
@@ -151,6 +164,14 @@ extension TrioSettings: Decodable {
 
         if let cgmPluginIdentifier = try? container.decode(String.self, forKey: .cgmPluginIdentifier) {
             settings.cgmPluginIdentifier = cgmPluginIdentifier
+        }
+
+        if let libreGlucoseReadIntervalMinutes = try? container.decode(
+            Int.self,
+            forKey: .libreGlucoseReadIntervalMinutes
+        ) {
+            settings.libreGlucoseReadIntervalMinutes = TrioSettings
+                .sanitizedLibreGlucoseReadIntervalMinutes(libreGlucoseReadIntervalMinutes)
         }
 
         if let uploadGlucose = try? container.decode(Bool.self, forKey: .uploadGlucose) {

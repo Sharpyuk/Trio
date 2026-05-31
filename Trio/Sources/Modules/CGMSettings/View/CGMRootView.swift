@@ -99,6 +99,25 @@ extension CGMSettings {
                         }.listRowBackground(Color.chart)
                     }
 
+                    if state.isLibreCGMSelected {
+                        Section(
+                            header: Text("Libre Glucose Reads"),
+                            footer: Text(
+                                "This changes how often Trio attempts to read Libre glucose data. It does not change insulin automation frequency."
+                            )
+                        ) {
+                            Picker(
+                                "Libre glucose read interval",
+                                selection: $state.libreGlucoseReadIntervalMinutes
+                            ) {
+                                ForEach(TrioSettings.libreGlucoseReadIntervalOptions, id: \.self) { minutes in
+                                    Text("\(minutes) min").tag(minutes)
+                                }
+                            }
+                        }
+                        .listRowBackground(Color.chart)
+                    }
+
                     SettingInputSection(
                         decimalValue: $decimalPlaceholder,
                         booleanValue: $state.smoothGlucose,

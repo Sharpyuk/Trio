@@ -31421,6 +31421,9 @@
         }
       }
     },
+    "Add Mock Garmin Watch" : {
+
+    },
     "Add Omnipod" : {
       "comment" : "Add Omnipod pump",
       "extractionState" : "manual",
@@ -153337,6 +153340,12 @@
         }
       }
     },
+    "Libre glucose read interval" : {
+
+    },
+    "Libre Glucose Reads" : {
+
+    },
     "Libre sensor was incorrectly read, CRCs were not valid" : {
       "comment" : "Libre sensor was incorrectly read, CRCs were not valid",
       "extractionState" : "manual",
@@ -209453,6 +209462,9 @@
         }
       }
     },
+    "Remove All Devices" : {
+
+    },
     "Remove Last" : {
       "localizations" : {
         "bg" : {
@@ -227164,6 +227176,12 @@
           }
         }
       }
+    },
+    "Simulator only - for testing UI workflow" : {
+
+    },
+    "Simulator Testing" : {
+
     },
     "Skip Bolus screen after carbs" : {
       "comment" : "Do you want to show bolus screen after added carbs?",
@@ -251045,6 +251063,9 @@
           }
         }
       }
+    },
+    "This changes how often Trio attempts to read Libre glucose data. It does not change insulin automation frequency." : {
+
     },
     "This could be useful for fast absorbing meals like sugary cereal." : {
       "localizations" : {

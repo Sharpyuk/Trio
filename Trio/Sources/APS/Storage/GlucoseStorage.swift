@@ -14,7 +14,7 @@ protocol GlucoseStorage {
     func addManualGlucose(glucose: Int)
     func isGlucoseDataFresh(_ glucoseDate: Date?) -> Bool
     func syncDate() -> Date
-    func filterTooFrequentGlucose(_ glucose: [BloodGlucose], at: Date) -> [BloodGlucose]
+    func filterTooFrequentGlucose(_ glucose: [BloodGlucose], at: Date, minimumInterval: TimeInterval?) -> [BloodGlucose]
     func lastGlucoseDate() -> Date?
     func isGlucoseFresh() -> Bool
     func getGlucoseNotYetUploadedToNightscout() async throws -> [BloodGlucose]
@@ -365,13 +365,18 @@ final class BaseGlucoseStorage: GlucoseStorage, Injectable {
         Date().timeIntervalSince(lastGlucoseDate() ?? .distantPast) <= Config.filterTime
     }
 
-    func filterTooFrequentGlucose(_ glucose: [BloodGlucose], at date: Date) -> [BloodGlucose] {
+    func filterTooFrequentGlucose(
+        _ glucose: [BloodGlucose],
+        at date: Date,
+        minimumInterval: TimeInterval? = nil
+    ) -> [BloodGlucose] {
         var lastDate = date
         var filtered: [BloodGlucose] = []
         let sorted = glucose.sorted { $0.date < $1.date }
+        let filterTime = minimumInterval ?? Config.filterTime
 
         for entry in sorted {
-            guard entry.dateString.addingTimeInterval(-Config.filterTime) > lastDate else {
+            guard entry.dateString.addingTimeInterval(-filterTime) > lastDate else {
                 continue
             }
             filtered.append(entry)

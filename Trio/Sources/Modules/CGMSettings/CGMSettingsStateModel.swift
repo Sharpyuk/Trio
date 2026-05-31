@@ -1,6 +1,7 @@
 import CGMBLEKit
 import Combine
 import G7SensorKit
+import LibreTransmitter
 import LoopKitUI
 import SwiftUI
 
@@ -48,6 +49,7 @@ extension CGMSettings {
         @Published var shouldDisplayCGMSetupSheet: Bool = false
         @Published var cgmCurrent = cgmDefaultModel
         @Published var smoothGlucose = false
+        @Published var libreGlucoseReadIntervalMinutes = 5
         @Published var cgmTransmitterDeviceAddress: String? = nil
         @Published var listOfCGM: [CGMModel] = []
         @Published var url: URL?
@@ -115,6 +117,23 @@ extension CGMSettings {
             cgmTransmitterDeviceAddress = UserDefaults.standard.cgmTransmitterDeviceAddress
 
             subscribeSetting(\.smoothGlucose, on: $smoothGlucose, initial: { smoothGlucose = $0 })
+            subscribeSetting(
+                \.libreGlucoseReadIntervalMinutes,
+                on: $libreGlucoseReadIntervalMinutes,
+                initial: {
+                    let interval = TrioSettings.sanitizedLibreGlucoseReadIntervalMinutes($0)
+                    libreGlucoseReadIntervalMinutes = interval
+                    Features.libreDirectReadIntervalMinutes = Double(interval)
+                },
+                map: TrioSettings.sanitizedLibreGlucoseReadIntervalMinutes,
+                didSet: { interval in
+                    Features.libreDirectReadIntervalMinutes = Double(interval)
+                }
+            )
+        }
+
+        var isLibreCGMSelected: Bool {
+            cgmCurrent.type == .plugin && cgmCurrent.id == LibreTransmitterManagerV3.pluginIdentifier
         }
 
         // this function will get called for all CGM types (plugin and non plugin)
@@ -195,6 +214,7 @@ extension CGMSettings.StateModel: CGMManagerOnboardingDelegate {
 extension CGMSettings.StateModel: SettingsObserver {
     func settingsDidChange(_: TrioSettings) {
         units = settingsManager.settings.units
+        libreGlucoseReadIntervalMinutes = settingsManager.settings.sanitizedLibreGlucoseReadIntervalMinutes
         // Deletes are handled differently for plugins vs non plugins
         // but both will call deleteGlucoseSource on the fetchGlucoseManager
         // so we listen for changes to the cgm setting and update our internal

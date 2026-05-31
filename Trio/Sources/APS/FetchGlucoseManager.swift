@@ -2,6 +2,7 @@ import Combine
 import CoreData
 import Foundation
 import HealthKit
+import LibreTransmitter
 import LoopKit
 import LoopKitUI
 import SwiftDate
@@ -60,6 +61,10 @@ final class BaseFetchGlucoseManager: FetchGlucoseManager, Injectable {
 
     /// Enforce mutual exclusion on calls to glucoseStoreAndHeartDecision
     private let glucoseStoreAndHeartLock = DispatchSemaphore(value: 1)
+    @Persisted(
+        key: "BaseFetchGlucoseManager.lastLibreAutomationHeartbeatDate"
+    ) private var lastLibreAutomationHeartbeatDate: Date =
+        .distantPast
 
     var shouldSyncToRemoteService: Bool {
         guard let cgmManager = cgmManager else {
@@ -69,6 +74,10 @@ final class BaseFetchGlucoseManager: FetchGlucoseManager, Injectable {
     }
 
     var shouldSmoothGlucose: Bool = false
+
+    private var isUsingLibreCGM: Bool {
+        cgmGlucoseSourceType == .plugin && cgmGlucosePluginId == LibreTransmitterManagerV3.pluginIdentifier
+    }
 
     init(resolver: Resolver) {
         injectServices(resolver)
@@ -81,6 +90,7 @@ final class BaseFetchGlucoseManager: FetchGlucoseManager, Injectable {
             cgmGlucosePluginId: settingsManager.settings.cgmPluginIdentifier
         )
         shouldSmoothGlucose = settingsManager.settings.smoothGlucose
+        applyLibreGlucoseReadInterval()
         subscribe()
     }
 
@@ -194,6 +204,7 @@ final class BaseFetchGlucoseManager: FetchGlucoseManager, Injectable {
 
         self.cgmGlucoseSourceType = cgmGlucoseSourceType
         self.cgmGlucosePluginId = cgmGlucosePluginId
+        applyLibreGlucoseReadInterval()
 
         // if not plugin, manager is not changed and stay with the "old" value if the user come back to previous cgmtype
         // if plugin, if the same pluginID, no change required because the manager is available
@@ -267,7 +278,11 @@ final class BaseFetchGlucoseManager: FetchGlucoseManager, Injectable {
         }
 
         filteredByDate = newGlucose.filter { $0.dateString > syncDate }
-        filtered = glucoseStorage.filterTooFrequentGlucose(filteredByDate, at: syncDate)
+        filtered = glucoseStorage.filterTooFrequentGlucose(
+            filteredByDate,
+            at: syncDate,
+            minimumInterval: minimumGlucoseStorageInterval()
+        )
 
         guard filtered.isNotEmpty else {
             endBackgroundTaskSafely(&backgroundTaskID, taskName: "Glucose Store and Heartbeat Decision")
@@ -281,7 +296,9 @@ final class BaseFetchGlucoseManager: FetchGlucoseManager, Injectable {
             await exponentialSmoothingGlucose(context: context)
         }
 
-        deviceDataManager.heartbeat(date: Date())
+        if shouldSendAutomationHeartbeatForStoredGlucose() {
+            deviceDataManager.heartbeat(date: Date())
+        }
 
         endBackgroundTaskSafely(&backgroundTaskID, taskName: "Glucose Store and Heartbeat Decision")
     }
@@ -309,6 +326,33 @@ final class BaseFetchGlucoseManager: FetchGlucoseManager, Injectable {
         } else {
             return entries
         }
+    }
+
+    private func applyLibreGlucoseReadInterval() {
+        guard isUsingLibreCGM else { return }
+
+        Features.libreDirectReadIntervalMinutes = Double(
+            settingsManager.settings.sanitizedLibreGlucoseReadIntervalMinutes
+        )
+    }
+
+    private func minimumGlucoseStorageInterval() -> TimeInterval? {
+        guard isUsingLibreCGM else { return nil }
+
+        let interval = settingsManager.settings.sanitizedLibreGlucoseReadIntervalMinutes
+        return max(60, TimeInterval(interval * 60) - 30)
+    }
+
+    private func shouldSendAutomationHeartbeatForStoredGlucose() -> Bool {
+        guard isUsingLibreCGM else { return true }
+
+        let now = Date()
+        guard lastLibreAutomationHeartbeatDate.addingTimeInterval(5.minutes.timeInterval) < now else {
+            return false
+        }
+
+        lastLibreAutomationHeartbeatDate = now
+        return true
     }
 }
 
@@ -347,6 +391,7 @@ extension BaseFetchGlucoseManager: SettingsObserver {
         let smoothingWasEnabled = shouldSmoothGlucose
         let smoothingIsEnabled = settingsManager.settings.smoothGlucose
         shouldSmoothGlucose = smoothingIsEnabled
+        applyLibreGlucoseReadInterval()
 
         guard smoothingIsEnabled, !smoothingWasEnabled else { return }
 
