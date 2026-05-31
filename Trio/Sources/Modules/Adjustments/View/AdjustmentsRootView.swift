@@ -28,7 +28,9 @@ extension Adjustments {
         @State var pendingPresetActivation: PendingPresetActivation?
 
         private var shouldDisplayStickyOverrideStopButton: Bool {
-            state.isOverrideEnabled && state.activeOverrideName.isNotEmpty
+            state.isOverrideEnabled &&
+                state.activeOverrideName.isNotEmpty &&
+                state.currentActiveOverride?.isExerciseMode != true
         }
 
         private var shouldDisplayStickyTempTargetStopButton: Bool {
@@ -847,6 +849,97 @@ struct ExerciseModeForm: View {
     }
 }
 
+private enum ExercisePhaseConfirmationAction: Identifiable {
+    case startExercise
+    case stopExercise
+    case endRecovery
+    case cancelExercise
+
+    var id: String {
+        switch self {
+        case .startExercise:
+            return "startExercise"
+        case .stopExercise:
+            return "stopExercise"
+        case .endRecovery:
+            return "endRecovery"
+        case .cancelExercise:
+            return "cancelExercise"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .startExercise:
+            return String(localized: "Start exercise now?")
+        case .stopExercise:
+            return String(localized: "Stop exercise?")
+        case .endRecovery:
+            return String(localized: "End recovery?")
+        case .cancelExercise:
+            return String(localized: "Cancel Exercise Override?")
+        }
+    }
+
+    var message: String {
+        switch self {
+        case .startExercise:
+            return String(localized: "This will skip the remaining pre-exercise phase and start active exercise immediately.")
+        case .stopExercise:
+            return String(
+                localized: "This will end active exercise now, stop glucose announcements, save an Exercise Report, and start recovery if the completed duration qualifies."
+            )
+        case .endRecovery:
+            return String(
+                localized: "This will end recovery now, restore standard Trio behaviour, and keep the Exercise Report saved."
+            )
+        case .cancelExercise:
+            return String(
+                localized: "This cancels the current Exercise Override, stops any exercise effects and announcements, and saves a report if exercise had already started."
+            )
+        }
+    }
+
+    var primaryButtonLabel: String {
+        switch self {
+        case .startExercise:
+            return String(localized: "Start Exercise")
+        case .stopExercise:
+            return String(localized: "Stop Exercise")
+        case .endRecovery:
+            return String(localized: "End Recovery")
+        case .cancelExercise:
+            return String(localized: "Cancel Override")
+        }
+    }
+
+    var primaryButtonRole: ButtonRole? {
+        switch self {
+        case .startExercise:
+            return nil
+        case .cancelExercise,
+             .endRecovery,
+             .stopExercise:
+            return .destructive
+        }
+    }
+
+    func secondaryButtonLabel(sessionState: ExerciseSessionState) -> String {
+        switch self {
+        case .startExercise:
+            return String(localized: "Not Yet")
+        case .stopExercise:
+            return String(localized: "Continue Running")
+        case .endRecovery:
+            return String(localized: "Continue Recovery")
+        case .cancelExercise:
+            return sessionState == .exerciseActive
+                ? String(localized: "Keep Running")
+                : String(localized: "Keep Override")
+        }
+    }
+}
+
 struct ExercisePhaseStatusView: View {
     let override: OverrideStored
     let formattedTimeRemaining: (TimeInterval) -> String
@@ -854,9 +947,9 @@ struct ExercisePhaseStatusView: View {
     let stopExercise: () -> Void
     let endRecovery: () -> Void
     let cancelExercise: () -> Void
-    @State private var confirmStopExercise = false
-    @State private var confirmCancelExercise = false
-    @State private var confirmEndRecovery = false
+    @State private var pendingConfirmationAction: ExercisePhaseConfirmationAction = .cancelExercise
+    @State private var isConfirmationPresented = false
+    @State private var showSessionDetail = false
 
     private var phase: ExercisePhase {
         override.exercisePhase ?? .duringExercise
@@ -932,6 +1025,36 @@ struct ExercisePhaseStatusView: View {
         return details.joined(separator: ", ")
     }
 
+    private var metadata: ExerciseSessionMetadata? {
+        guard let sessionID = override.id else { return nil }
+        return ExerciseSessionMetadataStore.load(sessionID: sessionID)
+    }
+
+    private var guardrailSummaryText: String {
+        guard let settings = metadata?.guardrailSettings, settings.enabled else {
+            return String(localized: "Guardrails: Off")
+        }
+
+        let threshold = formatGlucose(
+            settings.highGlucoseThresholdMgdl,
+            units: metadata?.announcementSettings.units ?? .mgdL
+        )
+        let persistence = Int(truncating: NSDecimalNumber(decimal: settings.highGlucosePersistenceMinutes))
+        let actionSummary: String
+        if settings.normalizedMode == .custom {
+            let actions = customGuardrailActions(settings.actions)
+            actionSummary = actions.isEmpty ? "" : ", \(actions.joined(separator: ", "))"
+        } else {
+            actionSummary = ""
+        }
+
+        return "\(String(localized: "Guardrails")): \(settings.normalizedMode.title), high >\(threshold) for \(persistence)m\(actionSummary)"
+    }
+
+    private var timeoutSummaryText: String {
+        String(localized: "Timeout: off")
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -945,6 +1068,12 @@ struct ExercisePhaseStatusView: View {
                     Text(detailText)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    Text(guardrailSummaryText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(timeoutSummaryText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     if let transitionText {
                         Text(transitionText)
                             .font(.caption2)
@@ -952,6 +1081,10 @@ struct ExercisePhaseStatusView: View {
                     }
                 }
                 Spacer()
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                showSessionDetail = true
             }
 
             GeometryReader { geo in
@@ -972,72 +1105,88 @@ struct ExercisePhaseStatusView: View {
                 }
             } else if phase == .preExercise {
                 HStack {
-                    Button {
-                        startExerciseNow()
-                    } label: {
-                        Text("Start Exercise Now")
-                    }
-
+                    Button("Start Exercise") { requestConfirmation(.startExercise) }
                     Spacer()
-
                     cancelButton
                 }
             } else if phase == .duringExercise {
                 HStack {
-                    Button {
-                        confirmStopExercise = true
-                    } label: {
-                        Text("Stop Exercise")
-                    }
-                    .confirmationDialog("Stop exercise?", isPresented: $confirmStopExercise) {
-                        Button("Stop Exercise", role: .destructive, action: stopExercise)
-                        Button("Cancel", role: .cancel) {}
-                    } message: {
-                        Text(
-                            "This will end active exercise now, stop glucose announcements, save an Exercise Report, and start recovery if the completed duration qualifies."
-                        )
-                    }
-
+                    Button("Stop Exercise") { requestConfirmation(.stopExercise) }
                     Spacer()
-
                     cancelButton
                 }
             } else if phase == .postExercise {
                 HStack {
-                    Button {
-                        confirmEndRecovery = true
-                    } label: {
-                        Text("End Recovery")
-                    }
-                    .confirmationDialog("End post-exercise recovery now?", isPresented: $confirmEndRecovery) {
-                        Button("End Recovery", role: .destructive, action: endRecovery)
-                        Button("Cancel", role: .cancel) {}
-                    } message: {
-                        Text("This will end recovery now, restore standard Trio behaviour, and keep the Exercise Report saved.")
-                    }
-
+                    Button("End Recovery") { requestConfirmation(.endRecovery) }
                     Spacer()
-
                     cancelButton
                 }
             }
         }
+        .confirmationDialog(
+            pendingConfirmationAction.title,
+            isPresented: $isConfirmationPresented,
+            titleVisibility: .visible
+        ) {
+            Button(pendingConfirmationAction.primaryButtonLabel, role: pendingConfirmationAction.primaryButtonRole) {
+                perform(pendingConfirmationAction)
+            }
+            Button(pendingConfirmationAction.secondaryButtonLabel(sessionState: sessionState), role: .cancel) {}
+        } message: {
+            Text(pendingConfirmationAction.message)
+        }
+        .sheet(isPresented: $showSessionDetail) {
+            ExerciseSessionConfigurationView(
+                override: override,
+                metadata: metadata,
+                formattedTimeRemaining: formattedTimeRemaining,
+                requestAction: { requestConfirmation($0) }
+            )
+        }
     }
 
     private var cancelButton: some View {
-        Button(role: .destructive) {
-            confirmCancelExercise = true
+        Button {
+            requestConfirmation(.cancelExercise)
         } label: {
             Text("Cancel")
+                .foregroundStyle(.red)
         }
-        .confirmationDialog("Cancel Exercise Override?", isPresented: $confirmCancelExercise) {
-            Button("Cancel", role: .destructive, action: cancelExercise)
-            Button("Keep Running", role: .cancel) {}
-        } message: {
-            Text(
-                "This cancels the current Exercise Override, stops any exercise effects and announcements, and saves a report if exercise had already started."
-            )
+    }
+
+    private func requestConfirmation(_ action: ExercisePhaseConfirmationAction) {
+        pendingConfirmationAction = action
+        isConfirmationPresented = true
+    }
+
+    private func perform(_ action: ExercisePhaseConfirmationAction) {
+        switch action {
+        case .startExercise:
+            startExerciseNow()
+        case .stopExercise:
+            stopExercise()
+        case .endRecovery:
+            endRecovery()
+        case .cancelExercise:
+            cancelExercise()
         }
+    }
+
+    private func customGuardrailActions(_ actions: ExerciseGuardrailActions) -> [String] {
+        var enabledActions: [String] = []
+        if actions.reenableBasal {
+            enabledActions.append(String(localized: "re-enable basal"))
+        }
+        if actions.reenableSMB {
+            enabledActions.append(String(localized: "re-enable SMBs"))
+        }
+        if actions.cancelExerciseOverride {
+            enabledActions.append(String(localized: "cancel override"))
+        }
+        if actions.announceWarning {
+            enabledActions.append(String(localized: "announce warning"))
+        }
+        return enabledActions
     }
 
     private func progressWidth(totalWidth: CGFloat) -> CGFloat {
@@ -1055,6 +1204,192 @@ struct ExercisePhaseStatusView: View {
         let elapsed = Date().timeIntervalSince(start)
         return totalWidth * CGFloat(max(0, min(1, elapsed / total)))
     }
+}
+
+private struct ExerciseSessionConfigurationView: View {
+    let override: OverrideStored
+    let metadata: ExerciseSessionMetadata?
+    let formattedTimeRemaining: (TimeInterval) -> String
+    let requestAction: (ExercisePhaseConfirmationAction) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    private var phase: ExercisePhase {
+        override.exercisePhase ?? .inactive
+    }
+
+    private var sessionState: ExerciseSessionState {
+        metadata?.state() ?? (override.isActive() ? .exerciseActive : .scheduledPreExercise)
+    }
+
+    var body: some View {
+        NavigationView {
+            List {
+                Section("Session") {
+                    row("Activity", override.exerciseTypeName ?? metadata?.exerciseTypeName ?? String(localized: "Exercise"))
+                    row("Phase", phase.title)
+                    row("State", sessionState.rawValue)
+                    row("Created", formattedDate(metadata?.sessionCreatedAt))
+                    row("Pre-exercise starts", formattedDate(metadata?.preExerciseStart))
+                    row("Exercise starts", formattedDate(metadata?.scheduledExerciseStart))
+                    row("Actual start", formattedDate(metadata?.actualExerciseStart))
+                    row("Actual stop", formattedDate(metadata?.actualExerciseEnd))
+                    row("Recovery ends", formattedDate(metadata?.recoveryEnd))
+                }
+
+                Section("Current Effect") {
+                    row("Basal", "\(Int(override.percentage))%")
+                    row("SMB", override.smbIsOff ? String(localized: "Suppressed") : String(localized: "Allowed"))
+                    row("Target", targetText())
+                    row("Sensitivity", sensitivityText(override.effectivePostExerciseSensitivityPercent()))
+                }
+
+                if let settings = metadata?.preExerciseSettings {
+                    Section("Pre-exercise Settings") {
+                        phaseRows(settings)
+                    }
+                }
+
+                if let settings = metadata?.exerciseSettings {
+                    Section("Active Exercise Settings") {
+                        phaseRows(settings)
+                    }
+                }
+
+                Section("Recovery Settings") {
+                    row("Enabled", boolText(metadata?.postExerciseEnabled ?? false))
+                    row("Basal", "\(Int(metadata?.postExerciseBasalPercentage ?? 100))%")
+                    row(
+                        "SMB",
+                        (metadata?.postExerciseSuppressSMB ?? false) ? String(localized: "Suppressed") :
+                            String(localized: "Allowed")
+                    )
+                    row("Target", recoveryTargetText())
+                }
+
+                Section("Announcements") {
+                    let settings = metadata?.announcementSettings ?? ExerciseAnnouncementSettings()
+                    row("Enabled", boolText(settings.enabled))
+                    row("Interval", "\(Int(truncating: NSDecimalNumber(decimal: settings.intervalMinutes)))m")
+                    row("Trend", boolText(settings.includeTrend))
+                    row("Rate of change", boolText(settings.includeRateOfChange))
+                    row("Urgent", boolText(settings.urgentAnnouncementsEnabled))
+                }
+
+                Section("Guardrails") {
+                    guardrailRows(metadata?.guardrailSettings ?? ExerciseGuardrailSettings())
+                }
+
+                Section("Timeout Guardrail") {
+                    row("Timeout", String(localized: "Off"))
+                }
+
+                Section {
+                    phaseActionButtons
+                    Button("Cancel") {
+                        dismiss()
+                        requestAction(.cancelExercise)
+                    }
+                    .foregroundStyle(.red)
+                }
+            }
+            .navigationTitle("Exercise Override")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var phaseActionButtons: some View {
+        if sessionState == .preExerciseActive || phase == .preExercise {
+            Button("Start Exercise") {
+                dismiss()
+                requestAction(.startExercise)
+            }
+        } else if sessionState == .exerciseActive || phase == .duringExercise {
+            Button("Stop Exercise") {
+                dismiss()
+                requestAction(.stopExercise)
+            }
+        } else if sessionState == .recoveryActive || phase == .postExercise {
+            Button("End Recovery") {
+                dismiss()
+                requestAction(.endRecovery)
+            }
+        }
+    }
+
+    @ViewBuilder private func phaseRows(_ settings: ExerciseSessionMetadata.PhaseSettings) -> some View {
+        row("Basal", "\(Int(settings.basalPercentage))%")
+        row("SMB", settings.suppressSMB ? String(localized: "Suppressed") : String(localized: "Allowed"))
+        row("Target", formatGlucose(settings.target, units: metadata?.announcementSettings.units ?? .mgdL))
+    }
+
+    @ViewBuilder private func guardrailRows(_ settings: ExerciseGuardrailSettings) -> some View {
+        row("Enabled", boolText(settings.enabled))
+        row("Mode", settings.normalizedMode.title)
+        row(
+            "High threshold",
+            formatGlucose(settings.highGlucoseThresholdMgdl, units: metadata?.announcementSettings.units ?? .mgdL)
+        )
+        row("Persistence", "\(Int(truncating: NSDecimalNumber(decimal: settings.highGlucosePersistenceMinutes)))m")
+        row("Trend", settings.trendRequirement.title)
+        row("Cooldown", "\(Int(truncating: NSDecimalNumber(decimal: settings.cooldownMinutes)))m")
+        row("Re-enable basal", boolText(settings.actions.reenableBasal))
+        row("Re-enable SMBs", boolText(settings.actions.reenableSMB))
+        row("Cancel override", boolText(settings.actions.cancelExerciseOverride))
+        row("Announce warning", boolText(settings.actions.announceWarning))
+    }
+
+    @ViewBuilder private func row(_ title: String, _ value: String) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            Text(value)
+                .multilineTextAlignment(.trailing)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func formattedDate(_ date: Date?) -> String {
+        guard let date else { return String(localized: "Not set") }
+        return DateFormatter.localizedString(from: date, dateStyle: .short, timeStyle: .short)
+    }
+
+    private func boolText(_ value: Bool) -> String {
+        value ? String(localized: "On") : String(localized: "Off")
+    }
+
+    private func targetText() -> String {
+        if phase == .postExercise, metadata?.postExerciseTargetEnabled != true {
+            return String(localized: "Profile target")
+        }
+        return formatGlucose(override.target?.decimalValue ?? 108, units: metadata?.announcementSettings.units ?? .mgdL)
+    }
+
+    private func recoveryTargetText() -> String {
+        guard metadata?.postExerciseTargetEnabled == true else {
+            return String(localized: "Profile target")
+        }
+        return formatGlucose(metadata?.postExerciseTarget ?? 108, units: metadata?.announcementSettings.units ?? .mgdL)
+    }
+
+    private func sensitivityText(_ value: Decimal) -> String {
+        guard value > 0 else { return String(localized: "Normal") }
+        return "+\(Int(truncating: NSDecimalNumber(decimal: value)))%"
+    }
+}
+
+private func formatGlucose(_ rawMgdl: Decimal, units: GlucoseUnits) -> String {
+    if units == .mgdL {
+        let formatted = Formatter.glucoseFormatter(for: units)
+            .string(from: rawMgdl as NSDecimalNumber) ?? "\(rawMgdl)"
+        return "\(formatted) \(units.rawValue)"
+    }
+    return "\(rawMgdl.formattedAsMmolL) \(units.rawValue)"
 }
 
 struct ExerciseReportsListView: View {

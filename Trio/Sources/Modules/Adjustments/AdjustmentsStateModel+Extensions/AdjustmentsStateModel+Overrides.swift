@@ -348,6 +348,9 @@ extension Adjustments.StateModel {
             debugPrint("ExerciseOverride START preExerciseDuration=\(preExerciseDuration)")
             debugPrint("ExerciseOverride START calculatedPreExerciseStart=\(plannedPreStart)")
             debugPrint("ExerciseOverride START sessionId=\(sessionID)")
+            debugPrint(
+                "ExerciseOverride START guardrails before save enabled=\(exerciseGuardrailSettings.enabled) mode=\(exerciseGuardrailSettings.mode.rawValue)"
+            )
 
             let initialPhase: ExercisePhase
             let initialStart: Date
@@ -409,6 +412,11 @@ extension Adjustments.StateModel {
                 ),
                 guardrailSettings: exerciseGuardrailSettings
             ))
+            if let savedMetadata = ExerciseSessionMetadataStore.load(sessionID: sessionID) {
+                debugPrint(
+                    "ExerciseOverride START saved guardrails session=\(sessionID) enabled=\(savedMetadata.guardrailSettings.enabled) mode=\(savedMetadata.guardrailSettings.mode.rawValue)"
+                )
+            }
 
             if initialStart <= now.addingTimeInterval(60) {
                 await disableAllActiveOverrides(createOverrideRunEntry: true)
@@ -430,7 +438,6 @@ extension Adjustments.StateModel {
             await saveCurrentExercisePreset()
             ExerciseGlucoseAnnouncementManager.shared.startMonitoring()
 
-            await resetExerciseModeState()
             setupScheduledExerciseOverridesArray()
             updateLatestOverrideConfiguration()
             Foundation.NotificationCenter.default.post(name: .didUpdateOverrideConfiguration, object: nil)

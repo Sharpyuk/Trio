@@ -28121,6 +28121,9 @@
     "Active exercise" : {
 
     },
+    "Active Exercise Settings" : {
+
+    },
     "Active Time" : {
       "comment" : "description label for active time pod details rowdescription label for active time pod details row",
       "extractionState" : "manual",
@@ -40774,6 +40777,9 @@
         }
       }
     },
+    "Allowed" : {
+
+    },
     "Allows fat and protein to be converted into future carb equivalents using the Warsaw formula of kilocalories divided by 10.\n\nThis spreads the carb equivilants over a maximum duration setting that can be configured from 5-12 hours.\n\nDelay is time from now until the first future carb entry.\n\nInterval in minutes is how many minutes are between entries. The shorter the interval, the smoother the result. 10, 15, 20, 30, or 60 are reasonable choices.\n\nAdjustment factor is how much effect the fat and protein has on the entries. 1.0 is full effect (original Warsaw Method) and 0.5 is half effect. Note that you may find that your normal carb ratio needs to increase to a larger number if you begin adding fat and protein entries. For this reason, it is best to start with a factor of about 0.5 to ease into it.\n\nDefault settings: Time Cap: 8 h, Interval: 30 min, Factor: 0.5, Delay 60 min" : {
       "comment" : "Description",
       "extractionState" : "manual",
@@ -45431,6 +45437,9 @@
 
     },
     "Announce urgent changes immediately" : {
+
+    },
+    "announce warning" : {
 
     },
     "Announce warning" : {
@@ -63732,6 +63741,9 @@
     "Cancel Exercise Override?" : {
 
     },
+    "cancel override" : {
+
+    },
     "Cancel override" : {
       "localizations" : {
         "bg" : {
@@ -78318,6 +78330,12 @@
         }
       }
     },
+    "Continue Recovery" : {
+
+    },
+    "Continue Running" : {
+
+    },
     "Continue without bolus" : {
       "comment" : "Continue after added carbs without bolus",
       "extractionState" : "manual",
@@ -79961,6 +79979,9 @@
           }
         }
       }
+    },
+    "Current Effect" : {
+
     },
     "Current IOB (%@ U) > Max IOB (%@ U)" : {
       "localizations" : {
@@ -112353,9 +112374,6 @@
         }
       }
     },
-    "End post-exercise recovery now?" : {
-
-    },
     "End Recovery" : {
 
     },
@@ -132857,6 +132875,9 @@
     "Guardrails" : {
 
     },
+    "Guardrails: Off" : {
+
+    },
     "h" : {
       "comment" : "abbreviation for hours\nh",
       "localizations" : {
@@ -150787,6 +150808,9 @@
           }
         }
       }
+    },
+    "Keep Override" : {
+
     },
     "Keep Running" : {
 
@@ -183438,6 +183462,9 @@
         }
       }
     },
+    "Not Yet" : {
+
+    },
     "Note" : {
       "comment" : "Food Type / Meal Note",
       "extractionState" : "manual",
@@ -198726,6 +198753,9 @@
     "Pre-exercise" : {
 
     },
+    "Pre-exercise Settings" : {
+
+    },
     "Prediction Type" : {
       "localizations" : {
         "bg" : {
@@ -201120,6 +201150,9 @@
           }
         }
       }
+    },
+    "Profile target" : {
+
     },
     "Profiles" : {
       "extractionState" : "manual",
@@ -206134,7 +206167,13 @@
         }
       }
     },
+    "re-enable basal" : {
+
+    },
     "Re-enable basal" : {
+
+    },
+    "re-enable SMBs" : {
 
     },
     "Re-enable SMBs" : {
@@ -207909,6 +207948,9 @@
 
     },
     "Recovery is calculated from the actual exercise duration when you stop exercise. Under 10 minutes creates a report without recovery sensitivity." : {
+
+    },
+    "Recovery Settings" : {
 
     },
     "Red = Below Range" : {
@@ -231904,7 +231946,10 @@
         }
       }
     },
-    "Start Exercise Now" : {
+    "Start Exercise" : {
+
+    },
+    "Start exercise now?" : {
 
     },
     "Start Exercise Override" : {
@@ -237702,6 +237747,9 @@
       }
     },
     "Suppress SMBs" : {
+
+    },
+    "Suppressed" : {
 
     },
     "Suspend" : {
@@ -258449,6 +258497,9 @@
         }
       }
     },
+    "This will skip the remaining pre-exercise phase and start active exercise immediately." : {
+
+    },
     "Tidepool" : {
       "localizations" : {
         "bg" : {
@@ -259821,6 +259872,12 @@
           }
         }
       }
+    },
+    "Timeout Guardrail" : {
+
+    },
+    "Timeout: off" : {
+
     },
     "Tip: Decreasing this value allows automatic adjustments of basal rates to be lower and ISF to be higher." : {
       "localizations" : {
