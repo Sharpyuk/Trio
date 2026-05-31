@@ -199,17 +199,20 @@ struct OverrideView: ChartContent {
             )
 
             if report.recoveryDurationCalculatedMinutes > 0 {
-                let recoveryEnd = report.exerciseStopTime.addingTimeInterval(
+                let calculatedRecoveryEnd = report.exerciseStopTime.addingTimeInterval(
                     TimeInterval(report.recoveryDurationCalculatedMinutes * 60)
                 )
-                appendSegment(
-                    &segments,
-                    id: "\(report.id)-report-recovery",
-                    start: report.exerciseStopTime,
-                    end: recoveryEnd,
-                    target: report.recoveryConfiguration?.target ?? state.currentGlucoseTarget,
-                    color: .teal
-                )
+                let recoveryEnd = report.actualRecoveryEndTime ?? calculatedRecoveryEnd
+                if recoveryEnd > report.exerciseStopTime {
+                    appendSegment(
+                        &segments,
+                        id: "\(report.id)-report-recovery",
+                        start: report.exerciseStopTime,
+                        end: recoveryEnd,
+                        target: report.recoveryConfiguration?.target ?? state.currentGlucoseTarget,
+                        color: .teal
+                    )
+                }
             }
         }
 

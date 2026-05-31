@@ -1480,9 +1480,13 @@ struct ExerciseReportDetailView: View {
             }
 
             Section("Recovery") {
-                row("Duration", "\(report.recoveryDurationCalculatedMinutes) min")
+                row("Recommended duration", "\(report.recoveryDurationCalculatedMinutes) min")
                 row("Sensitivity", "+\(report.recoverySensitivityAdjustmentCalculated)%")
                 row("Decay", report.decayModelUsed.title)
+                if let actualRecoveryEndTime = report.actualRecoveryEndTime {
+                    row("Actual recovery ended", formatDate(actualRecoveryEndTime))
+                    row("Actual recovery duration", "\(actualRecoveryDurationMinutes(endedAt: actualRecoveryEndTime)) min")
+                }
                 if let recoverySkippedReason = report.recoverySkippedReason {
                     row("Skipped reason", recoverySkippedReason)
                 }
@@ -1602,5 +1606,9 @@ struct ExerciseReportDetailView: View {
 
     private func formatDate(_ date: Date) -> String {
         DateFormatter.localizedString(from: date, dateStyle: .medium, timeStyle: .short)
+    }
+
+    private func actualRecoveryDurationMinutes(endedAt endTime: Date) -> Int {
+        max(0, Int(endTime.timeIntervalSince(report.exerciseStopTime) / 60))
     }
 }

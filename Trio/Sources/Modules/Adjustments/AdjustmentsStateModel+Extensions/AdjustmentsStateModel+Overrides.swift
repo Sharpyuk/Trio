@@ -82,6 +82,7 @@ struct ExerciseReport: Codable, Identifiable {
     let exerciseConfiguration: PhaseConfiguration
     let recoveryConfiguration: PhaseConfiguration?
     let announcementStats: AnnouncementStats
+    var actualRecoveryEndTime: Date? = nil
     var guardrailSummary: GuardrailSummary? = nil
     let glucoseStats: GlucoseStats
     let insulinStats: InsulinStats
@@ -121,6 +122,15 @@ enum ExerciseReportStore {
         loadReports().first { $0.id == sessionID }
     }
 
+    static func updateReport(
+        sessionID: String,
+        update: (inout ExerciseReport) -> Void
+    ) throws {
+        guard var report = loadReport(sessionID: sessionID) else { return }
+        update(&report)
+        _ = try save(report)
+    }
+
     static func exportURL(for report: ExerciseReport) throws -> URL {
         try save(report)
     }
@@ -158,6 +168,31 @@ enum ExerciseReportStore {
 }
 
 extension Adjustments.StateModel {
+    @MainActor private func markExerciseRecoveryEnded(sessionID: String, at endTime: Date) {
+        ExerciseSessionMetadataStore.update(sessionID: sessionID) {
+            $0.recoveryEnd = endTime
+        }
+
+        try? ExerciseReportStore.updateReport(sessionID: sessionID) { report in
+            report.actualRecoveryEndTime = endTime
+        }
+    }
+
+    @MainActor private func markActiveExerciseRecoveriesEnded(at endTime: Date) {
+        let fetchRequest: NSFetchRequest<OverrideStored> = OverrideStored.fetchRequest()
+        fetchRequest.predicate = NSPredicate(
+            format: "enabled == %@ AND name ENDSWITH %@",
+            true as NSNumber,
+            OverrideStored.exerciseNameSeparator + ExercisePhase.postExercise.title
+        )
+
+        guard let activeRecoveryOverrides = try? viewContext.fetch(fetchRequest) else { return }
+        for recoveryOverride in activeRecoveryOverrides {
+            guard let sessionID = recoveryOverride.id else { continue }
+            markExerciseRecoveryEnded(sessionID: sessionID, at: endTime)
+        }
+    }
+
     // MARK: - Enact Overrides
 
     /// Enacts an Override Preset by enabling it and disabling others.
@@ -193,42 +228,40 @@ extension Adjustments.StateModel {
             // Get ALL NSManagedObject IDs of ALL active Override to cancel every single Override
             let ids = try await overrideStorage.loadLatestOverrideConfigurations(fetchLimit: 0)
 
-            try await viewContext.perform {
-                // Fetch the existing OverrideStored objects from the context
-                let results = try ids.compactMap { id in
-                    try self.viewContext.existingObject(with: id) as? OverrideStored
-                }
-                guard !results.isEmpty else { return }
+            // Fetch the existing OverrideStored objects from the context
+            let results = try ids.compactMap { id in
+                try viewContext.existingObject(with: id) as? OverrideStored
+            }
+            guard !results.isEmpty else { return }
 
-                // Check if we also need to create a corresponding OverrideRunStored entry
-                if createOverrideRunEntry {
-                    // Use the first override to create a new OverrideRunStored entry
-                    if let canceledOverride = results.first {
-                        let newOverrideRunStored = OverrideRunStored(context: self.viewContext)
-                        newOverrideRunStored.id = canceledOverride
-                            .exercisePhase == .inactive ? UUID() : (UUID(uuidString: canceledOverride.id ?? "") ?? UUID())
-                        newOverrideRunStored.name = canceledOverride.name
-                        newOverrideRunStored.startDate = canceledOverride.date ?? .distantPast
-                        newOverrideRunStored.endDate = Date()
-                        newOverrideRunStored.target = NSDecimalNumber(
-                            decimal: self.overrideStorage.calculateTarget(override: canceledOverride)
-                        )
-                        newOverrideRunStored.override = canceledOverride
-                        newOverrideRunStored.isUploadedToNS = false
-                    }
+            // Check if we also need to create a corresponding OverrideRunStored entry
+            if createOverrideRunEntry {
+                // Use the first override to create a new OverrideRunStored entry
+                if let canceledOverride = results.first {
+                    let newOverrideRunStored = OverrideRunStored(context: viewContext)
+                    newOverrideRunStored.id = canceledOverride
+                        .exercisePhase == .inactive ? UUID() : (UUID(uuidString: canceledOverride.id ?? "") ?? UUID())
+                    newOverrideRunStored.name = canceledOverride.name
+                    newOverrideRunStored.startDate = canceledOverride.date ?? .distantPast
+                    newOverrideRunStored.endDate = Date()
+                    newOverrideRunStored.target = NSDecimalNumber(
+                        decimal: overrideStorage.calculateTarget(override: canceledOverride)
+                    )
+                    newOverrideRunStored.override = canceledOverride
+                    newOverrideRunStored.isUploadedToNS = false
                 }
+            }
 
-                // Disable all overrides except the one with overrideID
-                for overrideToCancel in results where overrideToCancel.objectID != overrideID {
-                    overrideToCancel.enabled = false
-                }
+            // Disable all overrides except the one with overrideID
+            for overrideToCancel in results where overrideToCancel.objectID != overrideID {
+                overrideToCancel.enabled = false
+            }
 
-                if self.viewContext.hasChanges {
-                    // Save changes and update the View
-                    try self.viewContext.save()
-                    ExerciseGlucoseAnnouncementManager.shared.stopSpeech()
-                    self.updateLatestOverrideConfiguration()
-                }
+            if viewContext.hasChanges {
+                // Save changes and update the View
+                try viewContext.save()
+                ExerciseGlucoseAnnouncementManager.shared.stopSpeech()
+                updateLatestOverrideConfiguration()
             }
         } catch {
             debug(
@@ -327,7 +360,7 @@ extension Adjustments.StateModel {
         }
     }
 
-    @discardableResult func saveExerciseMode() async -> Bool {
+    @MainActor @discardableResult func saveExerciseMode() async -> Bool {
         do {
             let now = Date()
             let sessionID = UUID().uuidString
@@ -419,6 +452,7 @@ extension Adjustments.StateModel {
             }
 
             if initialStart <= now.addingTimeInterval(60) {
+                markActiveExerciseRecoveriesEnded(at: now)
                 await disableAllActiveOverrides(createOverrideRunEntry: true)
             }
 
@@ -462,7 +496,7 @@ extension Adjustments.StateModel {
             }
 
             let now = Date()
-            if let preStartedAt = preExerciseOverride.date,
+            if preExerciseOverride.date != nil,
                let metadata = ExerciseSessionMetadataStore.load(sessionID: sessionID)
             {
                 let settings = metadata.exerciseSettings
@@ -790,6 +824,7 @@ extension Adjustments.StateModel {
                     }
                     $0.recoverySkippedReason = "cancelled"
                 }
+                markExerciseRecoveryEnded(sessionID: sessionID, at: cancelledAt)
                 if let activeExercise = sessionOverrides.first(where: { $0.exercisePhase == .duringExercise && $0.date != nil }) {
                     let cancelledDurationMinutes = max(0, cancelledAt.timeIntervalSince(activeExercise.date ?? cancelledAt) / 60)
                     activeExercise.duration = Decimal(max(1, cancelledDurationMinutes)) as NSDecimalNumber
@@ -844,9 +879,7 @@ extension Adjustments.StateModel {
                 }
             }
 
-            ExerciseSessionMetadataStore.update(sessionID: sessionID) {
-                $0.recoveryEnd = now
-            }
+            markExerciseRecoveryEnded(sessionID: sessionID, at: now)
             debugPrint("ExerciseOverride session \(sessionID) recovery-ended at \(now)")
 
             guard viewContext.hasChanges else {
