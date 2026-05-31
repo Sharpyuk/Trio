@@ -191,7 +191,10 @@ enum ExerciseActivityPresetStore {
     }
 
     static func preset(named name: String) -> ExerciseActivityPreset {
-        loadPresets().first { $0.activityTypeName == name || $0.id == name } ??
+        let normalizedName = normalizedPresetName(name)
+        return loadPresets().first {
+            normalizedPresetName($0.activityTypeName) == normalizedName || normalizedPresetName($0.id) == normalizedName
+        } ??
             builtInPresets.first { $0.activityTypeName == "Custom" }!
     }
 
@@ -219,6 +222,10 @@ enum ExerciseActivityPresetStore {
     private static func savePresets(_ presets: [ExerciseActivityPreset]) {
         guard let data = try? JSONEncoder().encode(presets) else { return }
         UserDefaults.standard.set(data, forKey: storageKey)
+    }
+
+    private static func normalizedPresetName(_ name: String) -> String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 }
 

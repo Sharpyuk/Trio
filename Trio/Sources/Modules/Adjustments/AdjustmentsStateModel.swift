@@ -104,6 +104,7 @@ extension Adjustments {
         var exerciseGuardrailSettings = ExerciseGuardrailSettings()
         var exerciseActivityPresets: [ExerciseActivityPreset] = ExerciseActivityPresetStore.loadPresets()
         var exercisePresetName = ""
+        var editingExercisePresetID: String?
 
         // Core Data
         let coredataContext = CoreDataStack.shared.newTaskContext()

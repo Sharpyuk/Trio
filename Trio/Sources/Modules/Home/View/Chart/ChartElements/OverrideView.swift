@@ -20,6 +20,7 @@ struct OverrideView: ChartContent {
 
     var body: some ChartContent {
         drawActiveOverrides()
+        drawHistoricalExerciseReports()
         drawOverrideRunStored()
     }
 
@@ -98,7 +99,7 @@ struct OverrideView: ChartContent {
                 start: exerciseStart,
                 end: exerciseEnd,
                 target: metadata.exerciseSettings?.target ?? getOverrideTarget(override: fallbackOverride),
-                color: .green
+                color: .purple
             )
         }
 
@@ -160,6 +161,61 @@ struct OverrideView: ChartContent {
         }
     }
 
+    private func drawHistoricalExerciseReports() -> some ChartContent {
+        ForEach(historicalExerciseReportSegments()) { segment in
+            RuleMark(
+                xStart: .value("Start", segment.start, unit: .second),
+                xEnd: .value("End", segment.end, unit: .second),
+                y: .value("Value", units == .mgdL ? segment.target : segment.target.asMmolL)
+            )
+            .foregroundStyle(segment.color.opacity(0.25))
+            .lineStyle(.init(lineWidth: 8))
+        }
+    }
+
+    private func historicalExerciseReportSegments() -> [ExerciseOverrideChartSegment] {
+        let activeSessionIDs = Set(overrides.compactMap { $0.isExerciseMode ? $0.id : nil })
+        var segments: [ExerciseOverrideChartSegment] = []
+
+        for report in ExerciseReportStore.loadReports() where !activeSessionIDs.contains(report.id) {
+            if let preStart = report.preExerciseStartTime, preStart < report.exerciseStartTime {
+                appendSegment(
+                    &segments,
+                    id: "\(report.id)-report-pre",
+                    start: preStart,
+                    end: report.exerciseStartTime,
+                    target: report.preExerciseConfiguration?.target ?? state.currentGlucoseTarget,
+                    color: .yellow
+                )
+            }
+
+            appendSegment(
+                &segments,
+                id: "\(report.id)-report-exercise",
+                start: report.exerciseStartTime,
+                end: report.exerciseStopTime,
+                target: report.exerciseConfiguration.target ?? state.currentGlucoseTarget,
+                color: .purple
+            )
+
+            if report.recoveryDurationCalculatedMinutes > 0 {
+                let recoveryEnd = report.exerciseStopTime.addingTimeInterval(
+                    TimeInterval(report.recoveryDurationCalculatedMinutes * 60)
+                )
+                appendSegment(
+                    &segments,
+                    id: "\(report.id)-report-recovery",
+                    start: report.exerciseStopTime,
+                    end: recoveryEnd,
+                    target: report.recoveryConfiguration?.target ?? state.currentGlucoseTarget,
+                    color: .teal
+                )
+            }
+        }
+
+        return segments
+    }
+
     // Handle Overrides where no Target is provided
     private func getOverrideTarget(override: OverrideStored) -> Decimal {
         if let target = MainChartHelper
@@ -178,7 +234,7 @@ struct OverrideView: ChartContent {
         case .preExercise:
             return .yellow
         case .duringExercise:
-            return .green
+            return .purple
         case .postExercise:
             return .teal
         case .inactive,

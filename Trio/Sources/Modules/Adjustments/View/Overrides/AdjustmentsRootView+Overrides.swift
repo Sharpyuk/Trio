@@ -156,6 +156,12 @@ extension Adjustments.RootView {
 
     @ViewBuilder private func exercisePresetActions(for preset: ExerciseActivityPreset) -> some View {
         let isBuiltIn = ExerciseActivityPresetStore.builtInPresets.contains { $0.id == preset.id }
+        Button {
+            state.applyExerciseActivityPreset(preset, editing: true)
+            showExerciseModeCreationSheet = true
+        } label: {
+            Label("Edit", systemImage: "pencil")
+        }
         if !isBuiltIn {
             Button(role: .destructive) {
                 state.deleteExerciseActivityPreset(preset)

@@ -513,8 +513,8 @@ extension Adjustments.StateModel {
         applyExerciseActivityPreset(preset)
     }
 
-    @MainActor func applyExerciseActivityPreset(_ preset: ExerciseActivityPreset) {
-        if let matchingType = ExerciseType.allCases.first(where: { $0.rawValue == preset.activityTypeName }) {
+    @MainActor func applyExerciseActivityPreset(_ preset: ExerciseActivityPreset, editing: Bool = false) {
+        if let matchingType = matchingExerciseType(for: preset.activityTypeName) {
             exerciseType = matchingType
             customExerciseTypeName = ""
         } else {
@@ -522,6 +522,7 @@ extension Adjustments.StateModel {
             customExerciseTypeName = preset.activityTypeName
         }
         exercisePresetName = preset.activityTypeName
+        editingExercisePresetID = editing ? preset.id : nil
         preExerciseEnabled = preset.preExerciseEnabled
         preExerciseDuration = preset.preExerciseDuration
         preExerciseTarget = preset.preExerciseTarget
@@ -544,8 +545,9 @@ extension Adjustments.StateModel {
     @MainActor func saveCurrentExercisePreset() {
         let trimmedPresetName = exercisePresetName.trimmingCharacters(in: .whitespacesAndNewlines)
         let name = trimmedPresetName.isEmpty ? resolvedExerciseTypeName : trimmedPresetName
+        let presetID = editingExercisePresetID ?? name
         let preset = ExerciseActivityPreset(
-            id: name,
+            id: presetID,
             activityTypeName: name,
             icon: exerciseType == .custom ? "figure.mixed.cardio" : "figure.run",
             preExerciseEnabled: preExerciseEnabled,
@@ -569,11 +571,24 @@ extension Adjustments.StateModel {
         ExerciseActivityPresetStore.savePreset(preset)
         exerciseActivityPresets = ExerciseActivityPresetStore.loadPresets()
         exercisePresetName = name
+        editingExercisePresetID = presetID
     }
 
     @MainActor func deleteExerciseActivityPreset(_ preset: ExerciseActivityPreset) {
         ExerciseActivityPresetStore.deletePreset(id: preset.id)
         exerciseActivityPresets = ExerciseActivityPresetStore.loadPresets()
+        if editingExercisePresetID == preset.id {
+            editingExercisePresetID = nil
+        }
+    }
+
+    private func matchingExerciseType(for name: String) -> ExerciseType? {
+        let normalizedName = normalizedExerciseTypeName(name)
+        return ExerciseType.allCases.first { normalizedExerciseTypeName($0.rawValue) == normalizedName }
+    }
+
+    private func normalizedExerciseTypeName(_ name: String) -> String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
     private func exerciseOverride(
@@ -1332,6 +1347,7 @@ extension Adjustments.StateModel {
         exerciseType = .run
         customExerciseTypeName = ""
         exercisePresetName = ""
+        editingExercisePresetID = nil
         exerciseActivityPresets = ExerciseActivityPresetStore.loadPresets()
         applyExercisePresetForSelectedType()
         postExerciseTargetEnabled = false

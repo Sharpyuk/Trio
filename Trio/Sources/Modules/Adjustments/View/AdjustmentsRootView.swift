@@ -521,7 +521,7 @@ struct ExerciseModeForm: View {
                     )
                     .foregroundStyle(.secondary)
                     TextField("Preset name", text: $state.exercisePresetName)
-                    Button("Save as Preset") {
+                    Button(state.editingExercisePresetID == nil ? "Save as Preset" : "Save Preset Changes") {
                         state.saveCurrentExercisePreset()
                     }
                     Button("Reset Built-in Presets") {
@@ -952,10 +952,7 @@ struct ExercisePhaseStatusView: View {
     let stopExercise: () -> Void
     let endRecovery: () -> Void
     let cancelExercise: () -> Void
-    @State private var confirmStartExercise = false
-    @State private var confirmStopExercise = false
-    @State private var confirmEndRecovery = false
-    @State private var confirmCancelExercise = false
+    @State private var pendingConfirmationAction: ExercisePhaseConfirmationAction?
     @State private var showSessionDetail = false
 
     private var phase: ExercisePhase {
@@ -1130,62 +1127,29 @@ struct ExercisePhaseStatusView: View {
                 }
             }
         }
+        .buttonStyle(.borderless)
         .confirmationDialog(
-            ExercisePhaseConfirmationAction.startExercise.title,
-            isPresented: $confirmStartExercise,
+            pendingConfirmationAction?.title ?? "",
+            isPresented: Binding(
+                get: { pendingConfirmationAction != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        pendingConfirmationAction = nil
+                    }
+                }
+            ),
             titleVisibility: .visible
         ) {
-            Button(ExercisePhaseConfirmationAction.startExercise.primaryButtonLabel) {
-                perform(.startExercise)
+            if let action = pendingConfirmationAction {
+                Button(action.primaryButtonLabel, role: action.primaryButtonRole) {
+                    perform(action)
+                }
+                Button(action.secondaryButtonLabel(sessionState: sessionState), role: .cancel) {
+                    pendingConfirmationAction = nil
+                }
             }
-            Button(
-                ExercisePhaseConfirmationAction.startExercise.secondaryButtonLabel(sessionState: sessionState),
-                role: .cancel
-            ) {}
         } message: {
-            Text(ExercisePhaseConfirmationAction.startExercise.message)
-        }
-        .confirmationDialog(
-            ExercisePhaseConfirmationAction.stopExercise.title,
-            isPresented: $confirmStopExercise,
-            titleVisibility: .visible
-        ) {
-            Button(ExercisePhaseConfirmationAction.stopExercise.primaryButtonLabel, role: .destructive) {
-                perform(.stopExercise)
-            }
-            Button(
-                ExercisePhaseConfirmationAction.stopExercise.secondaryButtonLabel(sessionState: sessionState),
-                role: .cancel
-            ) {}
-        } message: {
-            Text(ExercisePhaseConfirmationAction.stopExercise.message)
-        }
-        .confirmationDialog(
-            ExercisePhaseConfirmationAction.endRecovery.title,
-            isPresented: $confirmEndRecovery,
-            titleVisibility: .visible
-        ) {
-            Button(ExercisePhaseConfirmationAction.endRecovery.primaryButtonLabel, role: .destructive) {
-                perform(.endRecovery)
-            }
-            Button(ExercisePhaseConfirmationAction.endRecovery.secondaryButtonLabel(sessionState: sessionState), role: .cancel) {}
-        } message: {
-            Text(ExercisePhaseConfirmationAction.endRecovery.message)
-        }
-        .confirmationDialog(
-            ExercisePhaseConfirmationAction.cancelExercise.title,
-            isPresented: $confirmCancelExercise,
-            titleVisibility: .visible
-        ) {
-            Button(ExercisePhaseConfirmationAction.cancelExercise.primaryButtonLabel, role: .destructive) {
-                perform(.cancelExercise)
-            }
-            Button(
-                ExercisePhaseConfirmationAction.cancelExercise.secondaryButtonLabel(sessionState: sessionState),
-                role: .cancel
-            ) {}
-        } message: {
-            Text(ExercisePhaseConfirmationAction.cancelExercise.message)
+            Text(pendingConfirmationAction?.message ?? "")
         }
         .sheet(isPresented: $showSessionDetail) {
             ExerciseSessionConfigurationView(
@@ -1210,19 +1174,11 @@ struct ExercisePhaseStatusView: View {
         debugPrint(
             "Exercise action dialog requested: action=\(action.id) objectID=\(override.objectID.uriRepresentation().absoluteString)"
         )
-        switch action {
-        case .startExercise:
-            confirmStartExercise = true
-        case .stopExercise:
-            confirmStopExercise = true
-        case .endRecovery:
-            confirmEndRecovery = true
-        case .cancelExercise:
-            confirmCancelExercise = true
-        }
+        pendingConfirmationAction = action
     }
 
     private func perform(_ action: ExercisePhaseConfirmationAction) {
+        pendingConfirmationAction = nil
         debugPrint(
             "Exercise action confirmed: action=\(action.id) objectID=\(override.objectID.uriRepresentation().absoluteString)"
         )
