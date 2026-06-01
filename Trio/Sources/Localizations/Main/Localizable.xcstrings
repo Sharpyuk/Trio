@@ -2299,7 +2299,7 @@
       }
     },
     " g" : {
-      "comment" : "gram of carb equilvalents\ngram of carbs",
+      "comment" : "gram of carb equilvalents\ngram of carbs\ngram of meal macro",
       "localizations" : {
         "bg" : {
           "stringUnit" : {
@@ -4945,6 +4945,9 @@
           }
         }
       }
+    },
+    ": " : {
+
     },
     ". Changing: " : {
       "comment" : "Bolus pop-up / Alert string. Make translations concise!",
@@ -31421,6 +31424,9 @@
         }
       }
     },
+    "Add Mock Garmin Watch" : {
+
+    },
     "Add Omnipod" : {
       "comment" : "Add Omnipod pump",
       "extractionState" : "manual",
@@ -35591,6 +35597,9 @@
         }
       }
     },
+    "Advanced legacy mode. Converts fat/protein into delayed carb-equivalent entries." : {
+
+    },
     "Advanced Target Adjustments" : {
       "comment" : "Headline ”Advanced Target Adjustments\"",
       "extractionState" : "manual",
@@ -35970,6 +35979,9 @@
           }
         }
       }
+    },
+    "Aggressiveness" : {
+
     },
     "Agree and continue" : {
       "extractionState" : "manual",
@@ -48225,6 +48237,15 @@
           }
         }
       }
+    },
+    "Assist Aggressiveness" : {
+
+    },
+    "Assist creates a temporary target adjustment only. It does not create fake carbs or delayed boluses." : {
+
+    },
+    "Assist Duration" : {
+
     },
     "At the default setting, 35% of the calculation is based on the last 24 hours of insulin use, with the remaining 65% considering the last 10 days of data." : {
       "localizations" : {
@@ -88176,6 +88197,9 @@
           }
         }
       }
+    },
+    "Default: Log only. Protein/Fat Assist creates a temporary target adjustment; Legacy Scheduled FPU is opt-in." : {
+
     },
     "Default: OFF" : {
       "localizations" : {
@@ -152826,6 +152850,9 @@
         }
       }
     },
+    "Legacy Scheduled FPU" : {
+
+    },
     "Let's go through a few quick steps to ensure Trio works optimally for you." : {
       "localizations" : {
         "bg" : {
@@ -157129,6 +157156,7 @@
       }
     },
     "Log FPU" : {
+      "extractionState" : "stale",
       "localizations" : {
         "bg" : {
           "stringUnit" : {
@@ -157253,6 +157281,7 @@
       }
     },
     "Log FPU and %@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "bg" : {
           "stringUnit" : {
@@ -157623,6 +157652,15 @@
           }
         }
       }
+    },
+    "Log only" : {
+
+    },
+    "Log Protein/Fat" : {
+
+    },
+    "Log Protein/Fat and %@" : {
+
     },
     "Logarithmic" : {
       "localizations" : {
@@ -158370,6 +158408,9 @@
           }
         }
       }
+    },
+    "Logs fat and protein only. No delayed FPU carbs or scheduled insulin." : {
+
     },
     "Loop at %@ failed." : {
       "localizations" : {
@@ -170957,6 +170998,9 @@
         }
       }
     },
+    "Medium" : {
+
+    },
     "Medtronic" : {
       "localizations" : {
         "bg" : {
@@ -172468,6 +172512,9 @@
           }
         }
       }
+    },
+    "Mild" : {
+
     },
     "min" : {
       "comment" : "Minutes abbreviation\nShort form for minutes",
@@ -201921,6 +201968,28 @@
         }
       }
     },
+    "Protein/Fat Assist" : {
+
+    },
+    "Protein/Fat Strategy" : {
+
+    },
+    "Protein/Fat: Assist %lldm, %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Protein/Fat: Assist %1$lldm, %2$@"
+          }
+        }
+      }
+    },
+    "Protein/Fat: Legacy Scheduled FPU" : {
+
+    },
+    "Protein/Fat: Log only" : {
+
+    },
     "Pump" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -209458,6 +209527,9 @@
           }
         }
       }
+    },
+    "Remove All Devices" : {
+
     },
     "Remove Last" : {
       "localizations" : {
@@ -227171,6 +227243,12 @@
         }
       }
     },
+    "Simulator only - for testing UI workflow" : {
+
+    },
+    "Simulator Testing" : {
+
+    },
     "Skip Bolus screen after carbs" : {
       "comment" : "Do you want to show bolus screen after added carbs?",
       "extractionState" : "manual",
@@ -236006,6 +236084,9 @@
           }
         }
       }
+    },
+    "Strong" : {
+
     },
     "Style" : {
       "localizations" : {

@@ -68,7 +68,7 @@ extension NSPredicate {
 
     static var carbsHistory: NSPredicate {
         let date = Date.oneDayAgo
-        return NSPredicate(format: "date >= %@ AND carbs > 0", date as NSDate)
+        return NSPredicate(format: "date >= %@ AND (carbs > 0 OR fat > 0 OR protein > 0)", date as NSDate)
     }
 
     static var predicateForOneHourAgo: NSPredicate {

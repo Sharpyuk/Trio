@@ -171,16 +171,13 @@ extension Treatments {
         /// - Parameter current: The currently focused field
         /// - Returns: The next field that should receive focus, or nil if there is no next field
         private func nextField(from current: FocusedField) -> FocusedField? {
-            // If fat/protein fields are hidden, skip them in navigation
-            let showFPU = state.useFPUconversion
-
             switch current {
             case .fat:
                 return .bolus
             case .protein:
                 return .fat
             case .carbs:
-                return showFPU ? .protein : .bolus
+                return .protein
             case .bolus:
                 return .carbs
             }
@@ -194,8 +191,6 @@ extension Treatments {
         /// - Parameter current: The currently focused field
         /// - Returns: The previous field that should receive focus, or nil if there is no previous field
         private func previousField(from current: FocusedField) -> FocusedField? {
-            let showFPU = state.useFPUconversion
-
             switch current {
             case .fat:
                 return .protein
@@ -204,7 +199,7 @@ extension Treatments {
             case .carbs:
                 return .bolus
             case .bolus:
-                return showFPU ? .fat : .carbs
+                return .fat
             }
         }
 
@@ -220,25 +215,27 @@ extension Treatments {
                         Section {
                             carbsTextField()
 
-                            if state.useFPUconversion {
-                                proteinAndFat()
+                            proteinAndFat()
 
-                                if showFatProteinOrderBanner {
-                                    HStack {
-                                        Image(systemName: "arrow.left.arrow.right")
-                                        Text("The order of Fat and Protein inputs has changed.").font(.callout)
-                                        Spacer()
-                                        Button {
-                                            PropertyPersistentFlags.shared.hasSeenFatProteinOrderChange = true
-                                            withAnimation { showFatProteinOrderBanner = false }
-                                        } label: {
-                                            Image(systemName: "xmark.circle.fill")
-                                        }
-                                        .buttonStyle(.plain)
+                            if showFatProteinOrderBanner {
+                                HStack {
+                                    Image(systemName: "arrow.left.arrow.right")
+                                    Text("The order of Fat and Protein inputs has changed.").font(.callout)
+                                    Spacer()
+                                    Button {
+                                        PropertyPersistentFlags.shared.hasSeenFatProteinOrderChange = true
+                                        withAnimation { showFatProteinOrderBanner = false }
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
                                     }
-                                    .listRowBackground(Color.orange.opacity(0.75))
-                                    .transition(.opacity)
+                                    .buttonStyle(.plain)
                                 }
+                                .listRowBackground(Color.orange.opacity(0.75))
+                                .transition(.opacity)
+                            }
+
+                            if state.fat > 0 || state.protein > 0 {
+                                proteinFatStrategy()
                             }
 
                             // Time
@@ -562,6 +559,56 @@ extension Treatments {
             }
         }
 
+        @ViewBuilder private func proteinFatStrategy() -> some View {
+            Picker("Protein/Fat Strategy", selection: $state.proteinFatMealStrategy) {
+                ForEach(ProteinFatMealStrategy.allCases) { strategy in
+                    Text(strategy.displayName).tag(strategy)
+                }
+            }
+            .pickerStyle(.menu)
+
+            switch state.proteinFatMealStrategy {
+            case .logOnly:
+                Text("Logs fat and protein only. No delayed FPU carbs or scheduled insulin.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            case .assist:
+                HStack {
+                    Text("Assist Duration")
+                    Spacer()
+                    Button {
+                        state.proteinFatAssistDuration = max(60, state.proteinFatAssistDuration - 30)
+                    } label: {
+                        Image(systemName: "minus.circle")
+                    }
+                    .buttonStyle(.borderless)
+                    Text("\(Int(truncating: state.proteinFatAssistDuration as NSNumber)) min")
+                        .frame(minWidth: 70, alignment: .center)
+                    Button {
+                        state.proteinFatAssistDuration = min(720, state.proteinFatAssistDuration + 30)
+                    } label: {
+                        Image(systemName: "plus.circle")
+                    }
+                    .buttonStyle(.borderless)
+                }
+
+                Picker("Aggressiveness", selection: $state.proteinFatAssistAggressiveness) {
+                    ForEach(ProteinFatAssistAggressiveness.allCases) { aggressiveness in
+                        Text(aggressiveness.displayName).tag(aggressiveness)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Text("Assist creates a temporary target adjustment only. It does not create fake carbs or delayed boluses.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            case .legacyScheduledFPU:
+                Text("Advanced legacy mode. Converts fat/protein into delayed carb-equivalent entries.")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+        }
+
         /// Card-style in-progress visualizer matching Home's `bolusView` look:
         /// insulin-tinted background, cross.vial.fill icon, "Bolusing" + "X of Y U" text,
         /// xmark.app cancel, gradient progress bar overlaid at the bottom.
@@ -658,7 +705,7 @@ extension Treatments {
             case (true, true, false):
                 return Text("Log Carbs and \(bolusString)")
             case (true, false, true):
-                return Text("Log FPU and \(bolusString)")
+                return Text("Log Protein/Fat and \(bolusString)")
             case (true, false, false):
                 return Text(state.externalInsulin ? String(localized: "Log External Insulin") : String(localized: "Enact Bolus"))
             case (false, true, true):
@@ -666,7 +713,7 @@ extension Treatments {
             case (false, true, false):
                 return Text("Log Carbs")
             case (false, false, true):
-                return Text("Log FPU")
+                return Text("Log Protein/Fat")
             default:
                 return Text("Continue Without Treatment")
             }

@@ -7,6 +7,7 @@ import Testing
 
 @Suite("CarbsStorage Tests", .serialized) struct CarbsStorageTests: Injectable {
     @Injected() var storage: CarbsStorage!
+    @Injected() var settingsManager: SettingsManager!
     let resolver: Resolver
     var coreDataStack: CoreDataStack!
     var testContext: NSManagedObjectContext!
@@ -124,8 +125,61 @@ import Testing
     }
 
     @Test(
+        "Store fat/protein in log-only mode does not create scheduled FPU entries"
+    ) func testStoreFatProteinLogOnlyDoesNotCreateFPUEntries() async throws {
+        settingsManager.settings.proteinFatMealStrategy = .logOnly
+        let fpuID = UUID().uuidString
+        let baseDate = Date()
+        let mealEntry = CarbsEntry(
+            id: UUID().uuidString,
+            createdAt: baseDate,
+            actualDate: baseDate,
+            carbs: 0,
+            fat: 25,
+            protein: 60,
+            note: "Log only protein/fat",
+            enteredBy: "Test",
+            isFPU: false,
+            fpuID: fpuID
+        )
+
+        try await storage.storeCarbs([mealEntry], areFetchedFromRemote: false)
+
+        let storedEntries = try await coreDataStack.fetchEntitiesAsync(
+            ofType: CarbEntryStored.self,
+            onContext: testContext,
+            predicate: NSPredicate(format: "fpuID == %@", fpuID),
+            key: "date",
+            ascending: true
+        ) as? [CarbEntryStored]
+
+        guard let storedEntries else {
+            throw TestError("Failed to fetch entries for fpuID")
+        }
+
+        #expect(storedEntries.count == 1, "Log-only protein/fat should store one history entry")
+        #expect(storedEntries.first?.isFPU == false, "Log-only protein/fat must not create fake FPU carbs")
+        #expect(storedEntries.first?.fat == 25, "Fat value should be logged")
+        #expect(storedEntries.first?.protein == 60, "Protein value should be logged")
+
+        let historyEntries = try await coreDataStack.fetchEntitiesAsync(
+            ofType: CarbEntryStored.self,
+            onContext: testContext,
+            predicate: .carbsHistory,
+            key: "date",
+            ascending: true
+        ) as? [CarbEntryStored]
+
+        #expect(
+            historyEntries?.contains(where: { $0.id == mealEntry.id }) == true,
+            "Protein/fat-only meals should be visible in History > Meals"
+        )
+    }
+
+    @Test(
         "Store carb entry with fat/protein creates capped, spaced FPU entries (defaults: adjustment=0.5, delay=60m)"
     ) func testStoreFatProteinCarbEntryCreatesFPUEntries() async throws {
+        settingsManager.settings.proteinFatMealStrategy = .legacyScheduledFPU
         let fpuID = UUID().uuidString
         let baseDate = Date(timeIntervalSince1970: 1_700_000_000)
 
@@ -211,6 +265,7 @@ import Testing
     @Test(
         "Store very large fat/protein meal caps FPU equivalents at 99g and splits into 3×33g (defaults: adjustment=0.5, delay=60m)"
     ) func testStoreVeryLargeFatProteinMealCapsAndSplits() async throws {
+        settingsManager.settings.proteinFatMealStrategy = .legacyScheduledFPU
         let fpuID = UUID().uuidString
         let baseDate = Date(timeIntervalSince1970: 1_700_001_000)
 
@@ -301,6 +356,7 @@ import Testing
     @Test(
         "Store small fat/protein meal drops FPU equivalents when total would be <10g (defaults: adjustment=0.5, delay=60m)"
     ) func testStoreSmallFatProteinMealDropsFPUBelowMinimum() async throws {
+        settingsManager.settings.proteinFatMealStrategy = .legacyScheduledFPU
         let fpuID = UUID().uuidString
         let baseDate = Date(timeIntervalSince1970: 1_700_002_000)
 
@@ -382,6 +438,7 @@ import Testing
     }
 
     @Test("Get FPUs not yet uploaded to Nightscout") func testGetFPUsNotYetUploadedToNightscout() async throws {
+        settingsManager.settings.proteinFatMealStrategy = .legacyScheduledFPU
         // Given
         let fpuID = UUID().uuidString
         let testEntry = CarbsEntry(

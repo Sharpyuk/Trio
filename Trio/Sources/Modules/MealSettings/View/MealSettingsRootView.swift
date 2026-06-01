@@ -265,7 +265,52 @@ extension MealSettings {
                     },
                     headerText: String(localized: "Fat and Protein")
                 )
-                if state.useFPUconversion {
+
+                Section {
+                    Picker("Protein/Fat Strategy", selection: $state.proteinFatMealStrategy) {
+                        ForEach(ProteinFatMealStrategy.allCases) { strategy in
+                            Text(strategy.displayName).tag(strategy)
+                        }
+                    }
+                    .pickerStyle(.menu)
+
+                    Text(
+                        "Default: Log only. Protein/Fat Assist creates a temporary target adjustment; Legacy Scheduled FPU is opt-in."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                    if state.proteinFatMealStrategy == .assist {
+                        HStack {
+                            Text("Assist Duration")
+                            Spacer()
+                            Button {
+                                state.proteinFatAssistDuration = max(60, state.proteinFatAssistDuration - 30)
+                            } label: {
+                                Image(systemName: "minus.circle")
+                            }
+                            .buttonStyle(.borderless)
+                            Text("\(Int(truncating: state.proteinFatAssistDuration as NSNumber)) min")
+                                .frame(minWidth: 70)
+                            Button {
+                                state.proteinFatAssistDuration = min(720, state.proteinFatAssistDuration + 30)
+                            } label: {
+                                Image(systemName: "plus.circle")
+                            }
+                            .buttonStyle(.borderless)
+                        }
+
+                        Picker("Assist Aggressiveness", selection: $state.proteinFatAssistAggressiveness) {
+                            ForEach(ProteinFatAssistAggressiveness.allCases) { aggressiveness in
+                                Text(aggressiveness.displayName).tag(aggressiveness)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                    }
+                }
+                .listRowBackground(Color.chart)
+
+                if state.useFPUconversion && state.proteinFatMealStrategy == .legacyScheduledFPU {
                     SettingInputSection(
                         decimalValue: $state.delay,
                         booleanValue: $booleanPlaceholder,

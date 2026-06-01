@@ -42,6 +42,7 @@ final class BaseCarbsStorage: CarbsStorage, Injectable {
 
     func storeCarbs(_ entries: [CarbsEntry], areFetchedFromRemote: Bool) async throws {
         var entriesToStore = entries
+        let shouldCreateScheduledFPU = settings.settings.proteinFatMealStrategy.isLegacyScheduledFPU
 
         if areFetchedFromRemote {
             entriesToStore = try await filterRemoteEntries(entries: entriesToStore)
@@ -52,25 +53,29 @@ final class BaseCarbsStorage: CarbsStorage, Injectable {
             entry.carbs == 0 && (entry.fat ?? 0 > 0 || entry.protein ?? 0 > 0)
         }
 
-        // Create additional Carb (non-FPU) entries with fat/protein amounts and carbs == 0
-        for entry in fpuOnlyEntries {
-            let additionalEntry = CarbsEntry(
-                id: entry.id,
-                createdAt: entry.createdAt,
-                actualDate: entry.actualDate,
-                carbs: Decimal(0),
-                fat: entry.fat,
-                protein: entry.protein,
-                note: entry.note,
-                enteredBy: entry.enteredBy,
-                isFPU: false, // it should be a Carb entry
-                fpuID: entry.fpuID
-            )
-            entriesToStore.append(additionalEntry)
+        if shouldCreateScheduledFPU {
+            // Create additional Carb (non-FPU) entries with fat/protein amounts and carbs == 0
+            for entry in fpuOnlyEntries {
+                let additionalEntry = CarbsEntry(
+                    id: entry.id,
+                    createdAt: entry.createdAt,
+                    actualDate: entry.actualDate,
+                    carbs: Decimal(0),
+                    fat: entry.fat,
+                    protein: entry.protein,
+                    note: entry.note,
+                    enteredBy: entry.enteredBy,
+                    isFPU: false, // it should be a Carb entry
+                    fpuID: entry.fpuID
+                )
+                entriesToStore.append(additionalEntry)
+            }
         }
 
         await saveCarbsToCoreData(entries: entriesToStore, areFetchedFromRemote: areFetchedFromRemote)
-        await saveCarbEquivalents(entries: entriesToStore, areFetchedFromRemote: areFetchedFromRemote)
+        if shouldCreateScheduledFPU {
+            await saveCarbEquivalents(entries: entriesToStore, areFetchedFromRemote: areFetchedFromRemote)
+        }
     }
 
     private func filterRemoteEntries(entries: [CarbsEntry]) async throws -> [CarbsEntry] {

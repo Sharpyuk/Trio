@@ -16,6 +16,7 @@ extension Treatments {
         @ObservationIgnored @Injected() var settings: SettingsManager!
         @ObservationIgnored @Injected() var nsManager: NightscoutManager!
         @ObservationIgnored @Injected() var carbsStorage: CarbsStorage!
+        @ObservationIgnored @Injected() var overrideStorage: OverrideStorage!
         @ObservationIgnored @Injected() var glucoseStorage: GlucoseStorage!
         @ObservationIgnored @Injected() var determinationStorage: DeterminationStorage!
         @ObservationIgnored @Injected() var bolusCalculationManager: BolusCalculationManager!
@@ -96,6 +97,9 @@ extension Treatments {
 
         var carbsRequired: Decimal?
         var useFPUconversion: Bool = false
+        var proteinFatMealStrategy: ProteinFatMealStrategy = .logOnly
+        var proteinFatAssistDuration: Decimal = 300
+        var proteinFatAssistAggressiveness: ProteinFatAssistAggressiveness = .medium
         var dish: String = ""
         var selection: MealPresetStored?
         var summation: [String] = []
@@ -335,6 +339,9 @@ extension Treatments {
             maxFat = settings.settings.maxFat
             maxProtein = settings.settings.maxProtein
             useFPUconversion = settingsManager.settings.useFPUconversion
+            proteinFatMealStrategy = settingsManager.settings.proteinFatMealStrategy
+            proteinFatAssistDuration = settingsManager.settings.proteinFatAssistDuration
+            proteinFatAssistAggressiveness = settingsManager.settings.proteinFatAssistAggressiveness
             isSmoothingEnabled = settingsManager.settings.smoothGlucose
             glucoseColorScheme = settingsManager.settings.glucoseColorScheme
         }
@@ -686,11 +693,28 @@ extension Treatments {
                         fat: self.fat,
                         protein: self.protein,
                         note: self.note,
-                        amount: self.amount
+                        amount: self.amount,
+                        proteinFatMealStrategy: self.proteinFatMealStrategy,
+                        proteinFatAssistDuration: min(max(self.proteinFatAssistDuration, 60), 720),
+                        proteinFatAssistAggressiveness: self.proteinFatAssistAggressiveness
                     )
                 }
 
                 guard meal.carbs > 0 || meal.fat > 0 || meal.protein > 0 else { return }
+                let hasProteinOrFat = meal.fat > 0 || meal.protein > 0
+                let shouldCreateScheduledFPU = hasProteinOrFat && meal.proteinFatMealStrategy.isLegacyScheduledFPU
+                let noteWithStrategy = note(
+                    meal.note,
+                    appendingProteinFatStrategy: hasProteinOrFat ? meal.proteinFatMealStrategy : nil,
+                    duration: meal.proteinFatAssistDuration,
+                    aggressiveness: meal.proteinFatAssistAggressiveness
+                )
+
+                await MainActor.run {
+                    settingsManager.settings.proteinFatMealStrategy = meal.proteinFatMealStrategy
+                    settingsManager.settings.proteinFatAssistDuration = meal.proteinFatAssistDuration
+                    settingsManager.settings.proteinFatAssistAggressiveness = meal.proteinFatAssistAggressiveness
+                }
 
                 let carbsToStore = [CarbsEntry(
                     id: meal.id,
@@ -699,12 +723,19 @@ extension Treatments {
                     carbs: meal.carbs,
                     fat: meal.fat,
                     protein: meal.protein,
-                    note: meal.note,
+                    note: noteWithStrategy,
                     enteredBy: CarbsEntry.local,
                     isFPU: false,
-                    fpuID: meal.fat > 0 || meal.protein > 0 ? UUID().uuidString : nil
+                    fpuID: shouldCreateScheduledFPU ? UUID().uuidString : nil
                 )]
                 try await carbsStorage.storeCarbs(carbsToStore, areFetchedFromRemote: false)
+
+                if hasProteinOrFat, meal.proteinFatMealStrategy == .assist {
+                    try await storeProteinFatAssistOverride(
+                        duration: meal.proteinFatAssistDuration,
+                        aggressiveness: meal.proteinFatAssistAggressiveness
+                    )
+                }
 
                 // only perform determine basal sync if the user doesn't use the pump bolus, otherwise the enact bolus func in the APSManger does a sync
                 if meal.amount <= 0 {
@@ -716,6 +747,69 @@ extension Treatments {
             } catch {
                 debug(.default, "\(DebuggingIdentifiers.failed) Failed to save carbs: \(error)")
             }
+        }
+
+        private func note(
+            _ originalNote: String,
+            appendingProteinFatStrategy strategy: ProteinFatMealStrategy?,
+            duration: Decimal,
+            aggressiveness: ProteinFatAssistAggressiveness
+        ) -> String {
+            guard let strategy else { return originalNote }
+
+            let summary: String
+            switch strategy {
+            case .logOnly:
+                summary = String(localized: "Protein/Fat: Log only")
+            case .assist:
+                summary = String(
+                    localized: "Protein/Fat: Assist \(Int(truncating: duration as NSNumber))m, \(aggressiveness.displayName)"
+                )
+            case .legacyScheduledFPU:
+                summary = String(localized: "Protein/Fat: Legacy Scheduled FPU")
+            }
+
+            guard !originalNote.isEmpty else {
+                return summary
+            }
+
+            return "\(originalNote) | \(summary)"
+        }
+
+        private func storeProteinFatAssistOverride(
+            duration: Decimal,
+            aggressiveness: ProteinFatAssistAggressiveness
+        ) async throws {
+            let targetBase = currentBGTarget > 0 ? currentBGTarget : 100
+            let target = max(72, min(270, targetBase - aggressiveness.targetAdjustmentMgDL))
+            let override = Override(
+                name: "Protein/Fat Assist: \(aggressiveness.displayName)",
+                enabled: true,
+                date: Date(),
+                duration: min(max(duration, 60), 720),
+                indefinite: false,
+                percentage: 100,
+                smbIsOff: false,
+                isPreset: false,
+                id: UUID().uuidString,
+                overrideTarget: true,
+                target: target,
+                advancedSettings: false,
+                isfAndCr: false,
+                isf: false,
+                cr: false,
+                smbIsScheduledOff: false,
+                start: 0,
+                end: 0,
+                smbMinutes: 0,
+                uamMinutes: 0
+            )
+
+            try await overrideStorage.storeOverride(override: override)
+            debug(
+                .default,
+                "Protein/Fat Assist started: duration=\(duration)m aggressiveness=\(aggressiveness.rawValue) target=\(target)"
+            )
         }
 
         // MARK: - Presets

@@ -8,6 +8,9 @@ extension MealSettings {
         @Published var maxFat: Decimal = 250
         @Published var maxProtein: Decimal = 250
         @Published var individualAdjustmentFactor: Decimal = 0.5
+        @Published var proteinFatMealStrategy: ProteinFatMealStrategy = .logOnly
+        @Published var proteinFatAssistDuration: Decimal = 300
+        @Published var proteinFatAssistAggressiveness: ProteinFatAssistAggressiveness = .medium
         @Published var minuteInterval: Decimal = 30
         @Published var delay: Decimal = 60
         @Published var maxMealAbsorptionTime: Decimal = 6
@@ -22,6 +25,16 @@ extension MealSettings {
             subscribePreferencesSetting(\.maxMealAbsorptionTime, on: $maxMealAbsorptionTime) { maxMealAbsorptionTime = $0 }
 
             subscribeSetting(\.useFPUconversion, on: $useFPUconversion) { useFPUconversion = $0 }
+            subscribeSetting(\.proteinFatMealStrategy, on: $proteinFatMealStrategy) { proteinFatMealStrategy = $0 }
+            subscribeSetting(
+                \.proteinFatAssistDuration,
+                on: $proteinFatAssistDuration,
+                initial: { proteinFatAssistDuration = $0 },
+                map: { min(max($0, 60), 720) }
+            )
+            subscribeSetting(\.proteinFatAssistAggressiveness, on: $proteinFatAssistAggressiveness) {
+                proteinFatAssistAggressiveness = $0
+            }
 
             // "Fat and Protein Delay"
             subscribeSetting(\.delay, on: $delay) { delay = $0 }

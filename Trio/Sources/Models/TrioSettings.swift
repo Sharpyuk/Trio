@@ -15,6 +15,59 @@ enum BolusShortcutLimit: String, JSON, CaseIterable, Identifiable {
     }
 }
 
+enum ProteinFatMealStrategy: String, Codable, CaseIterable, Identifiable, Equatable {
+    case logOnly
+    case assist
+    case legacyScheduledFPU
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .logOnly:
+            return String(localized: "Log only")
+        case .assist:
+            return String(localized: "Protein/Fat Assist")
+        case .legacyScheduledFPU:
+            return String(localized: "Legacy Scheduled FPU")
+        }
+    }
+
+    var isLegacyScheduledFPU: Bool {
+        self == .legacyScheduledFPU
+    }
+}
+
+enum ProteinFatAssistAggressiveness: String, Codable, CaseIterable, Identifiable, Equatable {
+    case mild
+    case medium
+    case strong
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .mild:
+            return String(localized: "Mild")
+        case .medium:
+            return String(localized: "Medium")
+        case .strong:
+            return String(localized: "Strong")
+        }
+    }
+
+    var targetAdjustmentMgDL: Decimal {
+        switch self {
+        case .mild:
+            return 4
+        case .medium:
+            return 7
+        case .strong:
+            return 11
+        }
+    }
+}
+
 struct TrioSettings: JSON, Equatable, Encodable {
     var units: GlucoseUnits = .mgdL
     var closedLoop: Bool = false
@@ -42,6 +95,9 @@ struct TrioSettings: JSON, Equatable, Encodable {
     var carbsRequiredThreshold: Decimal = 10
     var showCarbsRequiredBadge: Bool = true
     var useFPUconversion: Bool = false
+    var proteinFatMealStrategy: ProteinFatMealStrategy = .logOnly
+    var proteinFatAssistDuration: Decimal = 300
+    var proteinFatAssistAggressiveness: ProteinFatAssistAggressiveness = .medium
     var individualAdjustmentFactor: Decimal = 0.5
     var minuteInterval: Decimal = 30
     var delay: Decimal = 60
@@ -200,6 +256,24 @@ extension TrioSettings: Decodable {
 
         if let useFPUconversion = try? container.decode(Bool.self, forKey: .useFPUconversion) {
             settings.useFPUconversion = useFPUconversion
+        }
+
+        if let proteinFatMealStrategy = try? container.decode(
+            ProteinFatMealStrategy.self,
+            forKey: .proteinFatMealStrategy
+        ) {
+            settings.proteinFatMealStrategy = proteinFatMealStrategy
+        }
+
+        if let proteinFatAssistDuration = try? container.decode(Decimal.self, forKey: .proteinFatAssistDuration) {
+            settings.proteinFatAssistDuration = min(max(proteinFatAssistDuration, 60), 720)
+        }
+
+        if let proteinFatAssistAggressiveness = try? container.decode(
+            ProteinFatAssistAggressiveness.self,
+            forKey: .proteinFatAssistAggressiveness
+        ) {
+            settings.proteinFatAssistAggressiveness = proteinFatAssistAggressiveness
         }
 
         if let individualAdjustmentFactor = try? container.decode(Decimal.self, forKey: .individualAdjustmentFactor) {
