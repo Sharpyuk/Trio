@@ -67,6 +67,8 @@ extension Treatments {
         var insulinCalculated: Decimal = 0
         var fraction: Decimal = 0
         var basal: Decimal = 0
+        var isTreatmentSubmissionInProgress: Bool = false
+        var shouldDismissWhenTreatmentSubmissionCompletes: Bool = false
         var fattyMeals: Bool = false
         var fattyMealFactor: Decimal = 0
         var useFattyMealCorrectionFactor: Bool = false
@@ -187,6 +189,29 @@ extension Treatments {
         @MainActor func dismissTreatmentView() {
             hideModal()
             onTreatmentDismiss?()
+        }
+
+        @MainActor private func beginTreatmentSubmission() {
+            addButtonPressed = true
+            isTreatmentSubmissionInProgress = true
+            shouldDismissWhenTreatmentSubmissionCompletes = false
+        }
+
+        @MainActor private func finishTreatmentSubmission(shouldDismiss: Bool) {
+            isTreatmentSubmissionInProgress = false
+
+            if shouldDismiss || shouldDismissWhenTreatmentSubmissionCompletes {
+                shouldDismissWhenTreatmentSubmissionCompletes = false
+                dismissTreatmentView()
+            }
+        }
+
+        @MainActor fileprivate func dismissAfterTreatmentSubmissionIfReady() {
+            if isTreatmentSubmissionInProgress {
+                shouldDismissWhenTreatmentSubmissionCompletes = true
+            } else {
+                dismissTreatmentView()
+            }
         }
 
         private func setupBolusStateConcurrently() {
@@ -436,22 +461,27 @@ extension Treatments {
             Task {
                 debug(.bolusState, "invokeTreatmentsTask fired")
                 await MainActor.run {
-                    self.addButtonPressed = true
+                    self.beginTreatmentSubmission()
                 }
-                let isInsulinGiven = amount > 0
-                let isCarbsPresent = carbs > 0
-                let isFatPresent = fat > 0
-                let isProteinPresent = protein > 0
+                let treatmentInput = await MainActor.run {
+                    (
+                        isInsulinGiven: self.amount > 0,
+                        isCarbsPresent: self.carbs > 0,
+                        isFatPresent: self.fat > 0,
+                        isProteinPresent: self.protein > 0,
+                        isExternalInsulin: self.externalInsulin
+                    )
+                }
 
-                if isCarbsPresent || isFatPresent || isProteinPresent {
+                if treatmentInput.isCarbsPresent || treatmentInput.isFatPresent || treatmentInput.isProteinPresent {
                     await saveMeal()
                 }
 
-                if isInsulinGiven {
-                    await handleInsulin(isExternal: externalInsulin)
+                if treatmentInput.isInsulinGiven {
+                    await handleInsulin(isExternal: treatmentInput.isExternalInsulin)
                 } else {
                     await MainActor.run {
-                        self.dismissTreatmentView()
+                        self.finishTreatmentSubmission(shouldDismiss: true)
                     }
                     return
                 }
@@ -469,8 +499,12 @@ extension Treatments {
                         determinationFailureMessage = "Glucose data is stale"
                     }
                     return await MainActor.run {
-                        self.dismissTreatmentView()
+                        self.finishTreatmentSubmission(shouldDismiss: true)
                     }
+                }
+
+                await MainActor.run {
+                    self.finishTreatmentSubmission(shouldDismiss: false)
                 }
             }
         }
@@ -638,31 +672,42 @@ extension Treatments {
 
         func saveMeal() async {
             do {
-                guard carbs > 0 || fat > 0 || protein > 0 else { return }
-
-                await MainActor.run {
+                let meal = await MainActor.run {
                     self.carbs = min(self.carbs, self.maxCarbs)
                     self.fat = min(self.fat, self.maxFat)
                     self.protein = min(self.protein, self.maxProtein)
                     self.id_ = UUID().uuidString
+
+                    return (
+                        id: self.id_,
+                        createdAt: self.now,
+                        actualDate: self.date,
+                        carbs: self.carbs,
+                        fat: self.fat,
+                        protein: self.protein,
+                        note: self.note,
+                        amount: self.amount
+                    )
                 }
 
+                guard meal.carbs > 0 || meal.fat > 0 || meal.protein > 0 else { return }
+
                 let carbsToStore = [CarbsEntry(
-                    id: id_,
-                    createdAt: now,
-                    actualDate: date,
-                    carbs: carbs,
-                    fat: fat,
-                    protein: protein,
-                    note: note,
+                    id: meal.id,
+                    createdAt: meal.createdAt,
+                    actualDate: meal.actualDate,
+                    carbs: meal.carbs,
+                    fat: meal.fat,
+                    protein: meal.protein,
+                    note: meal.note,
                     enteredBy: CarbsEntry.local,
                     isFPU: false,
-                    fpuID: fat > 0 || protein > 0 ? UUID().uuidString : nil
+                    fpuID: meal.fat > 0 || meal.protein > 0 ? UUID().uuidString : nil
                 )]
                 try await carbsStorage.storeCarbs(carbsToStore, areFetchedFromRemote: false)
 
                 // only perform determine basal sync if the user doesn't use the pump bolus, otherwise the enact bolus func in the APSManger does a sync
-                if amount <= 0 {
+                if meal.amount <= 0 {
                     await MainActor.run {
                         self.isAwaitingDeterminationResult = true
                     }
@@ -726,7 +771,7 @@ extension Treatments.StateModel: DeterminationObserver, BolusFailureObserver {
             debug(.bolusState, "determinationDidUpdate fired")
             self.isAwaitingDeterminationResult = false
             if self.addButtonPressed {
-                self.dismissTreatmentView()
+                self.dismissAfterTreatmentSubmissionIfReady()
             }
         }
     }
@@ -736,7 +781,7 @@ extension Treatments.StateModel: DeterminationObserver, BolusFailureObserver {
             debug(.bolusState, "bolusDidFail fired")
             self.isAwaitingDeterminationResult = false
             if self.addButtonPressed {
-                self.dismissTreatmentView()
+                self.dismissAfterTreatmentSubmissionIfReady()
             }
         }
     }

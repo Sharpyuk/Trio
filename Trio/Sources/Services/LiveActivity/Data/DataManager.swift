@@ -5,13 +5,16 @@ import Foundation
 @available(iOS 16.2, *)
 extension LiveActivityManager {
     func fetchAndMapGlucose() async throws -> [GlucoseData] {
+        let historyWindow: TimeInterval = 6 * 60 * 60
+        let maxChartPoints = 72
+        let cutoff = Date().addingTimeInterval(-historyWindow)
+
         let results = try await CoreDataStack.shared.fetchEntitiesAsync(
             ofType: GlucoseStored.self,
             onContext: context,
             predicate: NSPredicate.predicateForSixHoursAgo,
             key: "date",
-            ascending: false,
-            fetchLimit: 72
+            ascending: false
         )
 
         return try await context.perform {
@@ -19,10 +22,34 @@ extension LiveActivityManager {
                 throw CoreDataError.fetchError(function: #function, file: #file)
             }
 
-            return glucoseResults.map {
+            let glucoseData = glucoseResults.filter {
+                ($0.date ?? .distantPast) >= cutoff
+            }.map {
                 GlucoseData(glucose: Int($0.glucose), date: $0.date ?? Date(), direction: $0.directionEnum)
             }
+
+            return Self.downsampleForLiveActivity(glucoseData, maxCount: maxChartPoints)
         }
+    }
+
+    private static func downsampleForLiveActivity(_ glucose: [GlucoseData], maxCount: Int) -> [GlucoseData] {
+        guard glucose.count > maxCount, maxCount > 1 else {
+            return glucose
+        }
+
+        let newestFirst = glucose.sorted { $0.date > $1.date }
+        let oldestFirst = Array(newestFirst.reversed())
+        let step = Double(glucose.count - 1) / Double(maxCount - 1)
+
+        var selected: [GlucoseData] = []
+        selected.reserveCapacity(maxCount)
+
+        for index in 0 ..< maxCount {
+            let sourceIndex = Int((Double(index) * step).rounded())
+            selected.append(oldestFirst[sourceIndex])
+        }
+
+        return selected.sorted { $0.date > $1.date }
     }
 
     // TODO: extract logic or at least rename function appropiately
