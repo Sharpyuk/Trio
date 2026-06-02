@@ -48241,7 +48241,7 @@
     "Assist Aggressiveness" : {
 
     },
-    "Assist creates a temporary target adjustment only. It does not create fake carbs or delayed boluses." : {
+    "Assist creates a temporary override using normal Trio safety checks. It does not create fake carbs or delayed boluses." : {
 
     },
     "Assist Duration" : {
@@ -167741,6 +167741,9 @@
         }
       }
     },
+    "Max SMB" : {
+
+    },
     "Max SMB Basal Minutes" : {
       "comment" : "Max SMB Basal Minutes",
       "localizations" : {
@@ -167865,6 +167868,9 @@
           }
         }
       }
+    },
+    "Max UAM" : {
+
     },
     "Max UAM Basal Minutes" : {
       "comment" : "Max UAM Basal Minutes",

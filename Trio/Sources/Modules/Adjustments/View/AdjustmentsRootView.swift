@@ -283,6 +283,14 @@ extension Adjustments {
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
+
+                                if let activeOverride = state.currentActiveOverride,
+                                   let proteinFatAssistDetails = proteinFatAssistDetails(for: activeOverride)
+                                {
+                                    Text(proteinFatAssistDetails)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
 
                             Spacer()
@@ -332,6 +340,34 @@ extension Adjustments {
                 }
                 .listRowBackground(Color.loopGreen.opacity(0.8))
             }
+        }
+
+        private func proteinFatAssistDetails(for override: OverrideStored) -> String? {
+            guard (override.name ?? "").hasPrefix("Protein/Fat Assist") else { return nil }
+
+            var details: [String] = []
+            if let target = override.target?.decimalValue, target > 0 {
+                let displayTarget = state.units == .mmolL ? target.asMmolL.formatted(.number.precision(.fractionLength(1))) :
+                    target.formatted(.number.precision(.fractionLength(0)))
+                details.append("target \(displayTarget) \(state.units.rawValue)")
+            } else {
+                details.append("target Off")
+            }
+
+            if override.isf, override.percentage != 100 {
+                details.append("ISF \(Int(override.percentage))%")
+            }
+
+            if override.advancedSettings, !override.smbIsOff {
+                if let smbMinutes = override.smbMinutes?.decimalValue {
+                    details.append("SMB \(Int(truncating: smbMinutes as NSNumber))m")
+                }
+                if let uamMinutes = override.uamMinutes?.decimalValue {
+                    details.append("UAM \(Int(truncating: uamMinutes as NSNumber))m")
+                }
+            }
+
+            return details.isEmpty ? nil : details.joined(separator: ", ")
         }
 
         var cancelAdjustmentButton: some View {

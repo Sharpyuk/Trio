@@ -280,32 +280,10 @@ extension MealSettings {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                    if state.proteinFatMealStrategy == .assist {
-                        HStack {
-                            Text("Assist Duration")
-                            Spacer()
-                            Button {
-                                state.proteinFatAssistDuration = max(60, state.proteinFatAssistDuration - 30)
-                            } label: {
-                                Image(systemName: "minus.circle")
-                            }
-                            .buttonStyle(.borderless)
-                            Text("\(Int(truncating: state.proteinFatAssistDuration as NSNumber)) min")
-                                .frame(minWidth: 70)
-                            Button {
-                                state.proteinFatAssistDuration = min(720, state.proteinFatAssistDuration + 30)
-                            } label: {
-                                Image(systemName: "plus.circle")
-                            }
-                            .buttonStyle(.borderless)
-                        }
+                    proteinFatAssistDurationDefaults
 
-                        Picker("Assist Aggressiveness", selection: $state.proteinFatAssistAggressiveness) {
-                            ForEach(ProteinFatAssistAggressiveness.allCases) { aggressiveness in
-                                Text(aggressiveness.displayName).tag(aggressiveness)
-                            }
-                        }
-                        .pickerStyle(.segmented)
+                    ForEach(ProteinFatAssistAggressiveness.presetCases) { profile in
+                        proteinFatAssistProfileSection(for: profile)
                     }
                 }
                 .listRowBackground(Color.chart)
@@ -417,6 +395,149 @@ extension MealSettings {
             .navigationBarTitle("Meal Settings")
             .navigationBarTitleDisplayMode(.automatic)
             .settingsHighlightScroll()
+        }
+
+        @ViewBuilder private var proteinFatAssistDurationDefaults: some View {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Duration Defaults")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+
+                proteinFatAssistEffectRow(
+                    title: "Base duration",
+                    value: "\(Int(truncating: state.proteinFatAssistBaseDuration as NSNumber)) min",
+                    decrement: {
+                        state.proteinFatAssistBaseDuration = max(60, state.proteinFatAssistBaseDuration - 30)
+                    },
+                    increment: {
+                        state.proteinFatAssistBaseDuration = min(720, state.proteinFatAssistBaseDuration + 30)
+                    }
+                )
+
+                proteinFatAssistEffectRow(
+                    title: "Per 10g fat",
+                    value: "+\(Int(truncating: state.proteinFatAssistMinutesPer10gFat as NSNumber)) min",
+                    decrement: {
+                        state.proteinFatAssistMinutesPer10gFat = max(0, state.proteinFatAssistMinutesPer10gFat - 5)
+                    },
+                    increment: {
+                        state.proteinFatAssistMinutesPer10gFat = min(120, state.proteinFatAssistMinutesPer10gFat + 5)
+                    }
+                )
+
+                proteinFatAssistEffectRow(
+                    title: "Minimum",
+                    value: "\(Int(truncating: state.proteinFatAssistMinimumDuration as NSNumber)) min",
+                    decrement: {
+                        state.proteinFatAssistMinimumDuration = max(60, state.proteinFatAssistMinimumDuration - 30)
+                    },
+                    increment: {
+                        state.proteinFatAssistMinimumDuration = min(720, state.proteinFatAssistMinimumDuration + 30)
+                    }
+                )
+
+                proteinFatAssistEffectRow(
+                    title: "Maximum",
+                    value: "\(Int(truncating: state.proteinFatAssistMaximumDefaultDuration as NSNumber)) min",
+                    decrement: {
+                        state.proteinFatAssistMaximumDefaultDuration = max(60, state.proteinFatAssistMaximumDefaultDuration - 30)
+                    },
+                    increment: {
+                        state.proteinFatAssistMaximumDefaultDuration = min(720, state.proteinFatAssistMaximumDefaultDuration + 30)
+                    }
+                )
+            }
+        }
+
+        @ViewBuilder private func proteinFatAssistProfileSection(for profile: ProteinFatAssistAggressiveness) -> some View {
+            let settings = state.profileSettings(for: profile)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(profile.displayName)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+
+                proteinFatAssistEffectRow(
+                    title: "ISF",
+                    value: "\(Int(truncating: settings.isfPercent as NSNumber))%",
+                    decrement: {
+                        state.updateProfile(profile) { $0.isfPercent = max(70, $0.isfPercent - 1) }
+                    },
+                    increment: {
+                        state.updateProfile(profile) { $0.isfPercent = min(100, $0.isfPercent + 1) }
+                    }
+                )
+
+                proteinFatAssistEffectRow(
+                    title: "SMB uplift",
+                    value: "+\(Int(truncating: settings.smbMinutesIncrease as NSNumber)) min",
+                    decrement: {
+                        state.updateProfile(profile) { $0.smbMinutesIncrease = max(0, $0.smbMinutesIncrease - 5) }
+                    },
+                    increment: {
+                        state.updateProfile(profile) { $0.smbMinutesIncrease = min(60, $0.smbMinutesIncrease + 5) }
+                    }
+                )
+
+                proteinFatAssistEffectRow(
+                    title: "UAM uplift",
+                    value: "+\(Int(truncating: settings.uamMinutesIncrease as NSNumber)) min",
+                    decrement: {
+                        state.updateProfile(profile) { $0.uamMinutesIncrease = max(0, $0.uamMinutesIncrease - 5) }
+                    },
+                    increment: {
+                        state.updateProfile(profile) { $0.uamMinutesIncrease = min(60, $0.uamMinutesIncrease + 5) }
+                    }
+                )
+
+                Toggle("Target adjustment", isOn: Binding(
+                    get: { state.profileSettings(for: profile).targetAdjustmentEnabled },
+                    set: { isEnabled in
+                        state.updateProfile(profile) { $0.targetAdjustmentEnabled = isEnabled }
+                    }
+                ))
+
+                if settings.targetAdjustmentEnabled {
+                    proteinFatAssistEffectRow(
+                        title: "Target",
+                        value: "-\(formattedProteinFatAssistTargetAdjustment(settings.targetAdjustmentMgDL))",
+                        decrement: {
+                            state.updateProfile(profile) { $0.targetAdjustmentMgDL = max(0, $0.targetAdjustmentMgDL - 1) }
+                        },
+                        increment: {
+                            state.updateProfile(profile) { $0.targetAdjustmentMgDL = min(30, $0.targetAdjustmentMgDL + 1) }
+                        }
+                    )
+                }
+            }
+        }
+
+        private func formattedProteinFatAssistTargetAdjustment(_ adjustment: Decimal) -> String {
+            if state.units == .mmolL {
+                return "\(adjustment.asMmolL.formatted(.number.precision(.fractionLength(1)))) mmol/L"
+            }
+            return "\(Int(truncating: adjustment as NSNumber)) mg/dL"
+        }
+
+        @ViewBuilder private func proteinFatAssistEffectRow(
+            title: LocalizedStringKey,
+            value: String,
+            decrement: @escaping () -> Void,
+            increment: @escaping () -> Void
+        ) -> some View {
+            HStack {
+                Text(title)
+                Spacer()
+                Button(action: decrement) {
+                    Image(systemName: "minus.circle")
+                }
+                .buttonStyle(.borderless)
+                Text(value)
+                    .frame(minWidth: 86, alignment: .center)
+                Button(action: increment) {
+                    Image(systemName: "plus.circle")
+                }
+                .buttonStyle(.borderless)
+            }
         }
     }
 }

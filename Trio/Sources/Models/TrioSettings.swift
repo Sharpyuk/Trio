@@ -42,6 +42,7 @@ enum ProteinFatAssistAggressiveness: String, Codable, CaseIterable, Identifiable
     case mild
     case medium
     case strong
+    case custom
 
     var id: String { rawValue }
 
@@ -53,7 +54,13 @@ enum ProteinFatAssistAggressiveness: String, Codable, CaseIterable, Identifiable
             return String(localized: "Medium")
         case .strong:
             return String(localized: "Strong")
+        case .custom:
+            return String(localized: "Custom")
         }
+    }
+
+    static var presetCases: [ProteinFatAssistAggressiveness] {
+        [.mild, .medium, .strong]
     }
 
     var targetAdjustmentMgDL: Decimal {
@@ -64,7 +71,76 @@ enum ProteinFatAssistAggressiveness: String, Codable, CaseIterable, Identifiable
             return 7
         case .strong:
             return 11
+        case .custom:
+            return 0
         }
+    }
+
+    var isfPercent: Decimal {
+        switch self {
+        case .mild:
+            return 95
+        case .medium:
+            return 90
+        case .strong:
+            return 85
+        case .custom:
+            return 90
+        }
+    }
+
+    var smbMinutesIncrease: Decimal {
+        switch self {
+        case .mild:
+            return 5
+        case .medium:
+            return 10
+        case .strong:
+            return 20
+        case .custom:
+            return 10
+        }
+    }
+
+    var uamMinutesIncrease: Decimal {
+        switch self {
+        case .mild:
+            return 5
+        case .medium:
+            return 10
+        case .strong:
+            return 20
+        case .custom:
+            return 10
+        }
+    }
+}
+
+struct ProteinFatAssistProfileSettings: Codable, Equatable {
+    var isfPercent: Decimal
+    var smbMinutesIncrease: Decimal
+    var uamMinutesIncrease: Decimal
+    var targetAdjustmentEnabled: Bool
+    var targetAdjustmentMgDL: Decimal
+
+    static func defaults(for profile: ProteinFatAssistAggressiveness) -> Self {
+        Self(
+            isfPercent: profile.isfPercent,
+            smbMinutesIncrease: profile.smbMinutesIncrease,
+            uamMinutesIncrease: profile.uamMinutesIncrease,
+            targetAdjustmentEnabled: false,
+            targetAdjustmentMgDL: profile.targetAdjustmentMgDL
+        )
+    }
+
+    var sanitized: Self {
+        Self(
+            isfPercent: min(max(isfPercent, 70), 100),
+            smbMinutesIncrease: min(max(smbMinutesIncrease, 0), 60),
+            uamMinutesIncrease: min(max(uamMinutesIncrease, 0), 60),
+            targetAdjustmentEnabled: targetAdjustmentEnabled,
+            targetAdjustmentMgDL: min(max(targetAdjustmentMgDL, 0), 30)
+        )
     }
 }
 
@@ -98,6 +174,14 @@ struct TrioSettings: JSON, Equatable, Encodable {
     var proteinFatMealStrategy: ProteinFatMealStrategy = .logOnly
     var proteinFatAssistDuration: Decimal = 300
     var proteinFatAssistAggressiveness: ProteinFatAssistAggressiveness = .medium
+    var proteinFatAssistMildProfile: ProteinFatAssistProfileSettings = .defaults(for: .mild)
+    var proteinFatAssistMediumProfile: ProteinFatAssistProfileSettings = .defaults(for: .medium)
+    var proteinFatAssistStrongProfile: ProteinFatAssistProfileSettings = .defaults(for: .strong)
+    var proteinFatAssistCustomProfile: ProteinFatAssistProfileSettings = .defaults(for: .custom)
+    var proteinFatAssistBaseDuration: Decimal = 180
+    var proteinFatAssistMinutesPer10gFat: Decimal = 30
+    var proteinFatAssistMinimumDuration: Decimal = 120
+    var proteinFatAssistMaximumDefaultDuration: Decimal = 480
     var individualAdjustmentFactor: Decimal = 0.5
     var minuteInterval: Decimal = 30
     var delay: Decimal = 60
@@ -274,6 +358,59 @@ extension TrioSettings: Decodable {
             forKey: .proteinFatAssistAggressiveness
         ) {
             settings.proteinFatAssistAggressiveness = proteinFatAssistAggressiveness
+        }
+
+        if let proteinFatAssistMildProfile = try? container.decode(
+            ProteinFatAssistProfileSettings.self,
+            forKey: .proteinFatAssistMildProfile
+        ) {
+            settings.proteinFatAssistMildProfile = proteinFatAssistMildProfile.sanitized
+        }
+
+        if let proteinFatAssistMediumProfile = try? container.decode(
+            ProteinFatAssistProfileSettings.self,
+            forKey: .proteinFatAssistMediumProfile
+        ) {
+            settings.proteinFatAssistMediumProfile = proteinFatAssistMediumProfile.sanitized
+        }
+
+        if let proteinFatAssistStrongProfile = try? container.decode(
+            ProteinFatAssistProfileSettings.self,
+            forKey: .proteinFatAssistStrongProfile
+        ) {
+            settings.proteinFatAssistStrongProfile = proteinFatAssistStrongProfile.sanitized
+        }
+
+        if let proteinFatAssistCustomProfile = try? container.decode(
+            ProteinFatAssistProfileSettings.self,
+            forKey: .proteinFatAssistCustomProfile
+        ) {
+            settings.proteinFatAssistCustomProfile = proteinFatAssistCustomProfile.sanitized
+        }
+
+        if let proteinFatAssistBaseDuration = try? container.decode(Decimal.self, forKey: .proteinFatAssistBaseDuration) {
+            settings.proteinFatAssistBaseDuration = min(max(proteinFatAssistBaseDuration, 60), 720)
+        }
+
+        if let proteinFatAssistMinutesPer10gFat = try? container.decode(
+            Decimal.self,
+            forKey: .proteinFatAssistMinutesPer10gFat
+        ) {
+            settings.proteinFatAssistMinutesPer10gFat = min(max(proteinFatAssistMinutesPer10gFat, 0), 120)
+        }
+
+        if let proteinFatAssistMinimumDuration = try? container.decode(
+            Decimal.self,
+            forKey: .proteinFatAssistMinimumDuration
+        ) {
+            settings.proteinFatAssistMinimumDuration = min(max(proteinFatAssistMinimumDuration, 60), 720)
+        }
+
+        if let proteinFatAssistMaximumDefaultDuration = try? container.decode(
+            Decimal.self,
+            forKey: .proteinFatAssistMaximumDefaultDuration
+        ) {
+            settings.proteinFatAssistMaximumDefaultDuration = min(max(proteinFatAssistMaximumDefaultDuration, 60), 720)
         }
 
         if let individualAdjustmentFactor = try? container.decode(Decimal.self, forKey: .individualAdjustmentFactor) {

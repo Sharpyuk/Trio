@@ -121,6 +121,9 @@ extension Treatments {
                         unitsText: String(localized: "g", comment: "Units for carbs")
                     )
                     .focused($focusedField, equals: .fat)
+                    .onChange(of: state.fat) {
+                        state.updateRecommendedProteinFatAssistDuration()
+                    }
                 }
 
                 Divider().foregroundStyle(.primary).fontWeight(.bold).frame(width: 10)
@@ -578,6 +581,7 @@ extension Treatments {
                     Spacer()
                     Button {
                         state.proteinFatAssistDuration = max(60, state.proteinFatAssistDuration - 30)
+                        state.markProteinFatAssistDurationEdited()
                     } label: {
                         Image(systemName: "minus.circle")
                     }
@@ -586,26 +590,162 @@ extension Treatments {
                         .frame(minWidth: 70, alignment: .center)
                     Button {
                         state.proteinFatAssistDuration = min(720, state.proteinFatAssistDuration + 30)
+                        state.markProteinFatAssistDurationEdited()
                     } label: {
                         Image(systemName: "plus.circle")
                     }
                     .buttonStyle(.borderless)
                 }
+                if state.proteinFatAssistDurationManuallyEdited {
+                    Button("Use recommended duration") {
+                        state.resetProteinFatAssistDurationToRecommended()
+                    }
+                    .font(.caption)
+                }
 
-                Picker("Aggressiveness", selection: $state.proteinFatAssistAggressiveness) {
+                Picker("Profile", selection: $state.proteinFatAssistAggressiveness) {
                     ForEach(ProteinFatAssistAggressiveness.allCases) { aggressiveness in
                         Text(aggressiveness.displayName).tag(aggressiveness)
                     }
                 }
                 .pickerStyle(.segmented)
 
-                Text("Assist creates a temporary target adjustment only. It does not create fake carbs or delayed boluses.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if state.proteinFatAssistAggressiveness == .custom {
+                    proteinFatAssistCustomControls
+                } else {
+                    proteinFatAssistSummary(profile: state.effectiveProteinFatAssistProfile)
+                }
+
+                Text(
+                    "Assist creates a temporary override using normal Trio safety checks. It does not create fake carbs or delayed boluses."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
             case .legacyScheduledFPU:
                 Text("Advanced legacy mode. Converts fat/protein into delayed carb-equivalent entries.")
                     .font(.caption)
                     .foregroundStyle(.orange)
+            }
+        }
+
+        @ViewBuilder private var proteinFatAssistCustomControls: some View {
+            Toggle("Target adjustment", isOn: Binding(
+                get: { state.proteinFatAssistCustomProfile.targetAdjustmentEnabled },
+                set: { state.proteinFatAssistCustomProfile.targetAdjustmentEnabled = $0 }
+            ))
+
+            if state.proteinFatAssistCustomProfile.targetAdjustmentEnabled {
+                proteinFatAssistEffectRow(
+                    title: "Target",
+                    value: "-\(formattedProteinFatAssistTargetAdjustment(state.proteinFatAssistCustomProfile.targetAdjustmentMgDL))",
+                    decrement: {
+                        state.proteinFatAssistCustomProfile.targetAdjustmentMgDL = max(
+                            0,
+                            state.proteinFatAssistCustomProfile.targetAdjustmentMgDL - 1
+                        )
+                    },
+                    increment: {
+                        state.proteinFatAssistCustomProfile.targetAdjustmentMgDL = min(
+                            30,
+                            state.proteinFatAssistCustomProfile.targetAdjustmentMgDL + 1
+                        )
+                    }
+                )
+            }
+
+            proteinFatAssistEffectRow(
+                title: "ISF",
+                value: "\(Int(truncating: state.proteinFatAssistCustomProfile.isfPercent as NSNumber))%",
+                decrement: {
+                    state.proteinFatAssistCustomProfile.isfPercent = max(70, state.proteinFatAssistCustomProfile.isfPercent - 1)
+                },
+                increment: {
+                    state.proteinFatAssistCustomProfile.isfPercent = min(100, state.proteinFatAssistCustomProfile.isfPercent + 1)
+                }
+            )
+
+            proteinFatAssistEffectRow(
+                title: "SMB uplift",
+                value: "+\(Int(truncating: state.proteinFatAssistCustomProfile.smbMinutesIncrease as NSNumber)) min",
+                decrement: {
+                    state.proteinFatAssistCustomProfile.smbMinutesIncrease = max(
+                        0,
+                        state.proteinFatAssistCustomProfile.smbMinutesIncrease - 5
+                    )
+                },
+                increment: {
+                    state.proteinFatAssistCustomProfile.smbMinutesIncrease = min(
+                        60,
+                        state.proteinFatAssistCustomProfile.smbMinutesIncrease + 5
+                    )
+                }
+            )
+
+            proteinFatAssistEffectRow(
+                title: "UAM uplift",
+                value: "+\(Int(truncating: state.proteinFatAssistCustomProfile.uamMinutesIncrease as NSNumber)) min",
+                decrement: {
+                    state.proteinFatAssistCustomProfile.uamMinutesIncrease = max(
+                        0,
+                        state.proteinFatAssistCustomProfile.uamMinutesIncrease - 5
+                    )
+                },
+                increment: {
+                    state.proteinFatAssistCustomProfile.uamMinutesIncrease = min(
+                        60,
+                        state.proteinFatAssistCustomProfile.uamMinutesIncrease + 5
+                    )
+                }
+            )
+        }
+
+        @ViewBuilder private func proteinFatAssistSummary(profile: ProteinFatAssistProfileSettings) -> some View {
+            let profile = profile.sanitized
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Effective settings")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(
+                    "ISF: \(Int(truncating: profile.isfPercent as NSNumber))%, SMB uplift: +\(Int(truncating: profile.smbMinutesIncrease as NSNumber)) min, UAM uplift: +\(Int(truncating: profile.uamMinutesIncrease as NSNumber)) min"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                Text(
+                    profile.targetAdjustmentEnabled ?
+                        "Target adjustment: -\(formattedProteinFatAssistTargetAdjustment(profile.targetAdjustmentMgDL))" :
+                        "Target adjustment: Off"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+        }
+
+        private func formattedProteinFatAssistTargetAdjustment(_ adjustment: Decimal) -> String {
+            if state.units == .mmolL {
+                return "\(adjustment.asMmolL.formatted(.number.precision(.fractionLength(1)))) mmol/L"
+            }
+            return "\(Int(truncating: adjustment as NSNumber)) mg/dL"
+        }
+
+        @ViewBuilder private func proteinFatAssistEffectRow(
+            title: LocalizedStringKey,
+            value: String,
+            decrement: @escaping () -> Void,
+            increment: @escaping () -> Void
+        ) -> some View {
+            HStack {
+                Text(title)
+                Spacer()
+                Button(action: decrement) {
+                    Image(systemName: "minus.circle")
+                }
+                .buttonStyle(.borderless)
+                Text(value)
+                    .frame(minWidth: 86, alignment: .center)
+                Button(action: increment) {
+                    Image(systemName: "plus.circle")
+                }
+                .buttonStyle(.borderless)
             }
         }
 

@@ -11,6 +11,13 @@ extension MealSettings {
         @Published var proteinFatMealStrategy: ProteinFatMealStrategy = .logOnly
         @Published var proteinFatAssistDuration: Decimal = 300
         @Published var proteinFatAssistAggressiveness: ProteinFatAssistAggressiveness = .medium
+        @Published var proteinFatAssistMildProfile: ProteinFatAssistProfileSettings = .defaults(for: .mild)
+        @Published var proteinFatAssistMediumProfile: ProteinFatAssistProfileSettings = .defaults(for: .medium)
+        @Published var proteinFatAssistStrongProfile: ProteinFatAssistProfileSettings = .defaults(for: .strong)
+        @Published var proteinFatAssistBaseDuration: Decimal = 180
+        @Published var proteinFatAssistMinutesPer10gFat: Decimal = 30
+        @Published var proteinFatAssistMinimumDuration: Decimal = 120
+        @Published var proteinFatAssistMaximumDefaultDuration: Decimal = 480
         @Published var minuteInterval: Decimal = 30
         @Published var delay: Decimal = 60
         @Published var maxMealAbsorptionTime: Decimal = 6
@@ -35,6 +42,27 @@ extension MealSettings {
             subscribeSetting(\.proteinFatAssistAggressiveness, on: $proteinFatAssistAggressiveness) {
                 proteinFatAssistAggressiveness = $0
             }
+            subscribeSetting(\.proteinFatAssistMildProfile, on: $proteinFatAssistMildProfile) {
+                proteinFatAssistMildProfile = $0.sanitized
+            }
+            subscribeSetting(\.proteinFatAssistMediumProfile, on: $proteinFatAssistMediumProfile) {
+                proteinFatAssistMediumProfile = $0.sanitized
+            }
+            subscribeSetting(\.proteinFatAssistStrongProfile, on: $proteinFatAssistStrongProfile) {
+                proteinFatAssistStrongProfile = $0.sanitized
+            }
+            subscribeSetting(\.proteinFatAssistBaseDuration, on: $proteinFatAssistBaseDuration) {
+                proteinFatAssistBaseDuration = min(max($0, 60), 720)
+            }
+            subscribeSetting(\.proteinFatAssistMinutesPer10gFat, on: $proteinFatAssistMinutesPer10gFat) {
+                proteinFatAssistMinutesPer10gFat = min(max($0, 0), 120)
+            }
+            subscribeSetting(\.proteinFatAssistMinimumDuration, on: $proteinFatAssistMinimumDuration) {
+                proteinFatAssistMinimumDuration = min(max($0, 60), 720)
+            }
+            subscribeSetting(\.proteinFatAssistMaximumDefaultDuration, on: $proteinFatAssistMaximumDefaultDuration) {
+                proteinFatAssistMaximumDefaultDuration = min(max($0, 60), 720)
+            }
 
             // "Fat and Protein Delay"
             subscribeSetting(\.delay, on: $delay) { delay = $0 }
@@ -44,6 +72,35 @@ extension MealSettings {
 
             // "Fat and Protein Percentage"
             subscribeSetting(\.individualAdjustmentFactor, on: $individualAdjustmentFactor) { individualAdjustmentFactor = $0 }
+        }
+
+        func profileSettings(for profile: ProteinFatAssistAggressiveness) -> ProteinFatAssistProfileSettings {
+            switch profile {
+            case .mild:
+                return proteinFatAssistMildProfile.sanitized
+            case .medium:
+                return proteinFatAssistMediumProfile.sanitized
+            case .strong:
+                return proteinFatAssistStrongProfile.sanitized
+            case .custom:
+                return .defaults(for: .custom)
+            }
+        }
+
+        func updateProfile(_ profile: ProteinFatAssistAggressiveness, _ update: (inout ProteinFatAssistProfileSettings) -> Void) {
+            var settings = profileSettings(for: profile)
+            update(&settings)
+            settings = settings.sanitized
+            switch profile {
+            case .mild:
+                proteinFatAssistMildProfile = settings
+            case .medium:
+                proteinFatAssistMediumProfile = settings
+            case .strong:
+                proteinFatAssistStrongProfile = settings
+            case .custom:
+                break
+            }
         }
     }
 }

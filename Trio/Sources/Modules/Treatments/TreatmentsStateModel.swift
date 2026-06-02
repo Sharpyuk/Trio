@@ -100,6 +100,15 @@ extension Treatments {
         var proteinFatMealStrategy: ProteinFatMealStrategy = .logOnly
         var proteinFatAssistDuration: Decimal = 300
         var proteinFatAssistAggressiveness: ProteinFatAssistAggressiveness = .medium
+        var proteinFatAssistMildProfile: ProteinFatAssistProfileSettings = .defaults(for: .mild)
+        var proteinFatAssistMediumProfile: ProteinFatAssistProfileSettings = .defaults(for: .medium)
+        var proteinFatAssistStrongProfile: ProteinFatAssistProfileSettings = .defaults(for: .strong)
+        var proteinFatAssistCustomProfile: ProteinFatAssistProfileSettings = .defaults(for: .custom)
+        var proteinFatAssistBaseDuration: Decimal = 180
+        var proteinFatAssistMinutesPer10gFat: Decimal = 30
+        var proteinFatAssistMinimumDuration: Decimal = 120
+        var proteinFatAssistMaximumDefaultDuration: Decimal = 480
+        var proteinFatAssistDurationManuallyEdited: Bool = false
         var dish: String = ""
         var selection: MealPresetStored?
         var summation: [String] = []
@@ -342,6 +351,15 @@ extension Treatments {
             proteinFatMealStrategy = settingsManager.settings.proteinFatMealStrategy
             proteinFatAssistDuration = settingsManager.settings.proteinFatAssistDuration
             proteinFatAssistAggressiveness = settingsManager.settings.proteinFatAssistAggressiveness
+            proteinFatAssistMildProfile = settingsManager.settings.proteinFatAssistMildProfile.sanitized
+            proteinFatAssistMediumProfile = settingsManager.settings.proteinFatAssistMediumProfile.sanitized
+            proteinFatAssistStrongProfile = settingsManager.settings.proteinFatAssistStrongProfile.sanitized
+            proteinFatAssistCustomProfile = settingsManager.settings.proteinFatAssistCustomProfile.sanitized
+            proteinFatAssistBaseDuration = settingsManager.settings.proteinFatAssistBaseDuration
+            proteinFatAssistMinutesPer10gFat = settingsManager.settings.proteinFatAssistMinutesPer10gFat
+            proteinFatAssistMinimumDuration = settingsManager.settings.proteinFatAssistMinimumDuration
+            proteinFatAssistMaximumDefaultDuration = settingsManager.settings.proteinFatAssistMaximumDefaultDuration
+            updateRecommendedProteinFatAssistDuration()
             isSmoothingEnabled = settingsManager.settings.smoothGlucose
             glucoseColorScheme = settingsManager.settings.glucoseColorScheme
         }
@@ -684,6 +702,7 @@ extension Treatments {
                     self.fat = min(self.fat, self.maxFat)
                     self.protein = min(self.protein, self.maxProtein)
                     self.id_ = UUID().uuidString
+                    let assistProfile = self.effectiveProteinFatAssistProfile.sanitized
 
                     return (
                         id: self.id_,
@@ -696,7 +715,8 @@ extension Treatments {
                         amount: self.amount,
                         proteinFatMealStrategy: self.proteinFatMealStrategy,
                         proteinFatAssistDuration: min(max(self.proteinFatAssistDuration, 60), 720),
-                        proteinFatAssistAggressiveness: self.proteinFatAssistAggressiveness
+                        proteinFatAssistAggressiveness: self.proteinFatAssistAggressiveness,
+                        proteinFatAssistProfile: assistProfile
                     )
                 }
 
@@ -733,7 +753,8 @@ extension Treatments {
                 if hasProteinOrFat, meal.proteinFatMealStrategy == .assist {
                     try await storeProteinFatAssistOverride(
                         duration: meal.proteinFatAssistDuration,
-                        aggressiveness: meal.proteinFatAssistAggressiveness
+                        aggressiveness: meal.proteinFatAssistAggressiveness,
+                        profile: meal.proteinFatAssistProfile
                     )
                 }
 
@@ -778,38 +799,80 @@ extension Treatments {
 
         private func storeProteinFatAssistOverride(
             duration: Decimal,
-            aggressiveness: ProteinFatAssistAggressiveness
+            aggressiveness: ProteinFatAssistAggressiveness,
+            profile: ProteinFatAssistProfileSettings
         ) async throws {
+            let profile = profile.sanitized
             let targetBase = currentBGTarget > 0 ? currentBGTarget : 100
-            let target = max(72, min(270, targetBase - aggressiveness.targetAdjustmentMgDL))
+            let target = profile.targetAdjustmentEnabled ? max(72, min(270, targetBase - profile.targetAdjustmentMgDL)) : 0
+            let defaultSmbMinutes = settingsManager.preferences.maxSMBBasalMinutes
+            let defaultUamMinutes = settingsManager.preferences.maxUAMSMBBasalMinutes
+            let smbMinutes = min(180, defaultSmbMinutes + profile.smbMinutesIncrease)
+            let uamMinutes = min(180, defaultUamMinutes + profile.uamMinutesIncrease)
+            let usesAdvancedSettings = smbMinutes != defaultSmbMinutes || uamMinutes != defaultUamMinutes
             let override = Override(
                 name: "Protein/Fat Assist: \(aggressiveness.displayName)",
                 enabled: true,
                 date: Date(),
                 duration: min(max(duration, 60), 720),
                 indefinite: false,
-                percentage: 100,
+                percentage: Double(truncating: profile.isfPercent as NSNumber),
                 smbIsOff: false,
                 isPreset: false,
                 id: UUID().uuidString,
-                overrideTarget: true,
+                overrideTarget: profile.targetAdjustmentEnabled,
                 target: target,
-                advancedSettings: false,
+                advancedSettings: usesAdvancedSettings,
                 isfAndCr: false,
-                isf: false,
+                isf: profile.isfPercent != 100,
                 cr: false,
                 smbIsScheduledOff: false,
                 start: 0,
                 end: 0,
-                smbMinutes: 0,
-                uamMinutes: 0
+                smbMinutes: smbMinutes,
+                uamMinutes: uamMinutes
             )
 
             try await overrideStorage.storeOverride(override: override)
             debug(
                 .default,
-                "Protein/Fat Assist started: duration=\(duration)m aggressiveness=\(aggressiveness.rawValue) target=\(target)"
+                "Protein/Fat Assist started: duration=\(duration)m profile=\(aggressiveness.rawValue) targetEnabled=\(profile.targetAdjustmentEnabled) target=\(target) isf=\(profile.isfPercent)% smb=\(smbMinutes)m uam=\(uamMinutes)m"
             )
+        }
+
+        var effectiveProteinFatAssistProfile: ProteinFatAssistProfileSettings {
+            switch proteinFatAssistAggressiveness {
+            case .mild:
+                return proteinFatAssistMildProfile.sanitized
+            case .medium:
+                return proteinFatAssistMediumProfile.sanitized
+            case .strong:
+                return proteinFatAssistStrongProfile.sanitized
+            case .custom:
+                return proteinFatAssistCustomProfile.sanitized
+            }
+        }
+
+        func updateRecommendedProteinFatAssistDuration(force: Bool = false) {
+            guard force || !proteinFatAssistDurationManuallyEdited else { return }
+            let recommended = proteinFatAssistRecommendedDuration(forFat: fat)
+            proteinFatAssistDuration = recommended
+        }
+
+        func markProteinFatAssistDurationEdited() {
+            proteinFatAssistDurationManuallyEdited = true
+        }
+
+        func resetProteinFatAssistDurationToRecommended() {
+            proteinFatAssistDurationManuallyEdited = false
+            updateRecommendedProteinFatAssistDuration(force: true)
+        }
+
+        private func proteinFatAssistRecommendedDuration(forFat fat: Decimal) -> Decimal {
+            let rawDuration = proteinFatAssistBaseDuration + (max(0, fat) / 10 * proteinFatAssistMinutesPer10gFat)
+            let minDuration = min(proteinFatAssistMinimumDuration, proteinFatAssistMaximumDefaultDuration)
+            let maxDuration = max(proteinFatAssistMinimumDuration, proteinFatAssistMaximumDefaultDuration)
+            return min(max(rawDuration, minDuration), maxDuration)
         }
 
         // MARK: - Presets
