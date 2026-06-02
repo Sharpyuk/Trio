@@ -228,8 +228,8 @@ import Testing
         #expect(originalCarbEntry?.protein == 100, "Original protein should match")
 
         let fpuEntries = storedEntries.filter { $0.isFPU == true }
-        #expect(fpuEntries.count == 2, "Expected exactly one FPU entry under default settings")
-        #expect(Int(fpuEntries[0].carbs) == 21, "Expected 20g carb equivalents under default settings")
+        #expect(fpuEntries.count == 2, "Expected two FPU entries under v0.7/v0.8 default capped split settings")
+        #expect(Int(fpuEntries[0].carbs) == 21, "Expected 21g carb equivalents under default settings")
 
         for fpuEntry in fpuEntries {
             #expect(fpuEntry.fat == 0, "FPU fat must be 0")
@@ -259,6 +259,66 @@ import Testing
         #expect(
             storedEntries.allSatisfy { $0.fpuID?.uuidString == fpuID },
             "All entries should share the same fpuID"
+        )
+    }
+
+    @Test(
+        "Legacy scheduled FPU matches v0.7/v0.8 for 25g fat and 60g protein"
+    ) func testLegacyScheduledFPUForFat25Protein60CreatesSingleDelayedEntry() async throws {
+        settingsManager.settings.proteinFatMealStrategy = .legacyScheduledFPU
+        let fpuID = UUID().uuidString
+        let baseDate = Date(timeIntervalSince1970: 1_700_000_500)
+
+        // v0.7/v0.8 behavior:
+        // fat=25g -> 225 kcal
+        // protein=60g -> 240 kcal
+        // kcal total = 465
+        // (kcal/10) = 46.5
+        // 46.5 * adjustment 0.5 = 23.25
+        // Int(23.25) = 23 equivalents -> one delayed FPU entry
+        let mealEntry = CarbsEntry(
+            id: UUID().uuidString,
+            createdAt: baseDate,
+            actualDate: baseDate,
+            carbs: 0,
+            fat: 25,
+            protein: 60,
+            note: "Legacy FPU 25g fat 60g protein",
+            enteredBy: "Test",
+            isFPU: false,
+            fpuID: fpuID
+        )
+
+        try await storage.storeCarbs([mealEntry], areFetchedFromRemote: false)
+
+        let storedEntries = try await coreDataStack.fetchEntitiesAsync(
+            ofType: CarbEntryStored.self,
+            onContext: testContext,
+            predicate: NSPredicate(format: "fpuID == %@", fpuID),
+            key: "date",
+            ascending: true
+        ) as? [CarbEntryStored]
+
+        guard let storedEntries else {
+            throw TestError("Failed to fetch entries for fpuID")
+        }
+
+        let originalMealEntries = storedEntries.filter { $0.isFPU == false }
+        #expect(originalMealEntries.count == 1, "Legacy FPU should keep one visible fat/protein meal entry")
+        #expect(originalMealEntries.first?.carbs == 0, "Original meal should not invent upfront carbs")
+        #expect(originalMealEntries.first?.fat == 25, "Original meal should preserve fat")
+        #expect(originalMealEntries.first?.protein == 60, "Original meal should preserve protein")
+
+        let fpuEntries = storedEntries.filter { $0.isFPU == true }
+        #expect(fpuEntries.count == 1, "25g fat and 60g protein should create one v0.7/v0.8 delayed FPU entry")
+        #expect(Int(fpuEntries.first?.carbs ?? 0) == 23, "Expected 23g delayed carb equivalents")
+        #expect(fpuEntries.first?.fat == 0, "FPU fat must be 0")
+        #expect(fpuEntries.first?.protein == 0, "FPU protein must be 0")
+
+        let fpuDate = try #require(fpuEntries.first?.date)
+        #expect(
+            fpuDate >= baseDate.addingTimeInterval(60 * 60),
+            "Legacy FPU should schedule the first entry no earlier than the configured 60 minute delay"
         )
     }
 
