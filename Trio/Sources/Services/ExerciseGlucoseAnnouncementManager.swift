@@ -419,6 +419,8 @@ struct ExerciseSessionMetadata: Codable, Equatable {
 }
 
 enum ExerciseSessionMetadataStore {
+    private static var cachedMetadata: [ExerciseSessionMetadata]?
+
     static var metadataDirectory: URL {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         return documents.appendingPathComponent("ExerciseSessions", isDirectory: true)
@@ -431,9 +433,16 @@ enum ExerciseSessionMetadataStore {
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try encoder.encode(metadata).write(to: url, options: .atomic)
+        cachedMetadata = nil
     }
 
     static func load(sessionID: String) -> ExerciseSessionMetadata? {
+        if let cachedMetadata,
+           let metadata = cachedMetadata.first(where: { $0.sessionID == sessionID })
+        {
+            return metadata
+        }
+
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         guard let data = try? Data(contentsOf: url(for: sessionID)) else { return nil }
@@ -441,11 +450,15 @@ enum ExerciseSessionMetadataStore {
     }
 
     static func loadAll() -> [ExerciseSessionMetadata] {
+        if let cachedMetadata {
+            return cachedMetadata
+        }
+
         let urls = (try? FileManager.default.contentsOfDirectory(
             at: metadataDirectory,
             includingPropertiesForKeys: nil
         )) ?? []
-        return urls.compactMap { url in
+        let metadata: [ExerciseSessionMetadata] = urls.compactMap { url in
             guard url.pathExtension == "json",
                   let data = try? Data(contentsOf: url)
             else { return nil }
@@ -453,6 +466,8 @@ enum ExerciseSessionMetadataStore {
             decoder.dateDecodingStrategy = .iso8601
             return try? decoder.decode(ExerciseSessionMetadata.self, from: data)
         }
+        cachedMetadata = metadata
+        return metadata
     }
 
     static func visibleSessionIDs(at now: Date = Date()) -> [String] {

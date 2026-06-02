@@ -89,6 +89,8 @@ struct ExerciseReport: Codable, Identifiable {
 }
 
 enum ExerciseReportStore {
+    private static var cachedReports: [ExerciseReport]?
+
     static var reportsDirectory: URL {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         return documents.appendingPathComponent("ExerciseReports", isDirectory: true)
@@ -101,25 +103,40 @@ enum ExerciseReportStore {
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try encoder.encode(report).write(to: url, options: .atomic)
+        cachedReports = nil
         return url
     }
 
     static func loadReports() -> [ExerciseReport] {
+        if let cachedReports {
+            return cachedReports
+        }
+
         let urls = (try? FileManager.default.contentsOfDirectory(
             at: reportsDirectory,
             includingPropertiesForKeys: nil
         )) ?? []
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return urls
+        let reports = urls
             .filter { $0.pathExtension == "json" }
             .compactMap { try? Data(contentsOf: $0) }
             .compactMap { try? decoder.decode(ExerciseReport.self, from: $0) }
             .sorted { $0.exerciseStopTime > $1.exerciseStopTime }
+        cachedReports = reports
+        return reports
     }
 
     static func loadReport(sessionID: String) -> ExerciseReport? {
-        loadReports().first { $0.id == sessionID }
+        if let cachedReports {
+            return cachedReports.first { $0.id == sessionID }
+        }
+
+        let url = reportsDirectory.appendingPathComponent("exercise-report-\(sessionID).json")
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? decoder.decode(ExerciseReport.self, from: data)
     }
 
     static func updateReport(
