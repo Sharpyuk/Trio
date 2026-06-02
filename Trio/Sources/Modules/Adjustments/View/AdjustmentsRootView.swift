@@ -467,11 +467,9 @@ struct ExerciseModeForm: View {
     @Environment(AppState.self) private var appState
 
     @State private var targetStep: Decimal = 5
-    @State private var targetOptions: [Decimal] = []
     @State private var displayPreTarget = false
     @State private var displayExerciseTarget = false
     @State private var displayPostTarget = false
-    @State private var didInitialize = false
 
     private var isScheduled: Bool {
         state.exerciseStartDate > Date().addingTimeInterval(60)
@@ -720,14 +718,11 @@ struct ExerciseModeForm: View {
                 }
             }
             .onAppear {
-                initializeFormIfNeeded()
-            }
-            .onChange(of: targetStep) { _, _ in
-                refreshTargetOptions()
-            }
-            .onChange(of: state.units) { _, _ in
                 targetStep = state.units == .mgdL ? 5 : 9
-                refreshTargetOptions()
+                if !state.scheduleExerciseForFuture {
+                    state.exerciseStartDate = Date()
+                }
+                state.applyExercisePresetForSelectedType()
             }
         }
     }
@@ -821,10 +816,17 @@ struct ExerciseModeForm: View {
         selection: Binding<Decimal>,
         displayPickerTarget: Binding<Bool>
     ) -> some View {
+        let settingsProvider = PickerSettingsProvider.shared
+        let glucoseSetting = PickerSetting(value: 0, step: targetStep, min: 72, max: 270, type: .glucose)
+
         TargetPicker(
             label: label,
             selection: selection,
-            options: targetOptions.isEmpty ? Self.targetOptions(units: state.units, targetStep: targetStep) : targetOptions,
+            options: settingsProvider.generatePickerValues(
+                from: glucoseSetting,
+                units: state.units,
+                roundMinToStep: true
+            ),
             units: state.units,
             targetStep: $targetStep,
             displayPickerTarget: displayPickerTarget,
@@ -837,33 +839,6 @@ struct ExerciseModeForm: View {
         displayExerciseTarget = false
         displayPostTarget = false
         return !toggle
-    }
-
-    private func initializeFormIfNeeded() {
-        guard !didInitialize else { return }
-        didInitialize = true
-        targetStep = state.units == .mgdL ? 5 : 9
-        refreshTargetOptions()
-
-        if !state.scheduleExerciseForFuture {
-            state.exerciseStartDate = Date()
-        }
-        if state.editingExercisePresetID == nil {
-            state.applyExercisePresetForSelectedType()
-        }
-    }
-
-    private func refreshTargetOptions() {
-        targetOptions = Self.targetOptions(units: state.units, targetStep: targetStep)
-    }
-
-    private static func targetOptions(units: GlucoseUnits, targetStep: Decimal) -> [Decimal] {
-        let glucoseSetting = PickerSetting(value: 0, step: targetStep, min: 72, max: 270, type: .glucose)
-        return PickerSettingsProvider.shared.generatePickerValues(
-            from: glucoseSetting,
-            units: units,
-            roundMinToStep: true
-        )
     }
 }
 
