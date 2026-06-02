@@ -28263,6 +28263,9 @@
         }
       }
     },
+    "Activity" : {
+
+    },
     "Activity preset" : {
 
     },
@@ -35979,9 +35982,6 @@
           }
         }
       }
-    },
-    "Aggressiveness" : {
-
     },
     "Agree and continue" : {
       "extractionState" : "manual",
@@ -48238,9 +48238,6 @@
         }
       }
     },
-    "Assist Aggressiveness" : {
-
-    },
     "Assist creates a temporary override using normal Trio safety checks. It does not create fake carbs or delayed boluses." : {
 
     },
@@ -55408,6 +55405,9 @@
           }
         }
       }
+    },
+    "Base duration" : {
+
     },
     "Basic Insulin Rates & Targets" : {
       "localizations" : {
@@ -73563,6 +73563,9 @@
           }
         }
       }
+    },
+    "Combined" : {
+
     },
     "Coming soon." : {
       "localizations" : {
@@ -101710,6 +101713,9 @@
         }
       }
     },
+    "Duration Defaults" : {
+
+    },
     "Duration of Insulin Action" : {
       "comment" : "Duration of Insulin Action",
       "localizations" : {
@@ -104593,6 +104599,9 @@
           }
         }
       }
+    },
+    "Effective settings" : {
+
     },
     "Emoji or short text" : {
       "localizations" : {
@@ -121222,6 +121231,9 @@
           }
         }
       }
+    },
+    "Fat peak" : {
+
     },
     "Fat-Protein Carb Equivalent" : {
       "localizations" : {
@@ -149848,6 +149860,16 @@
         }
       }
     },
+    "ISF: %lld%%, SMB uplift: +%lld min, UAM uplift: +%lld min" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "ISF: %1$lld%%, SMB uplift: +%2$lld min, UAM uplift: +%3$lld min"
+          }
+        }
+      }
+    },
     "ISF/CR" : {
       "comment" : "Option for both ISF and CR",
       "localizations" : {
@@ -167741,9 +167763,6 @@
         }
       }
     },
-    "Max SMB" : {
-
-    },
     "Max SMB Basal Minutes" : {
       "comment" : "Max SMB Basal Minutes",
       "localizations" : {
@@ -167868,9 +167887,6 @@
           }
         }
       }
-    },
-    "Max UAM" : {
-
     },
     "Max UAM Basal Minutes" : {
       "comment" : "Max UAM Basal Minutes",
@@ -168120,6 +168136,9 @@
           }
         }
       }
+    },
+    "Maximum" : {
+
     },
     "Maximum allowed positive percent change in glucose level to permit SMBs. If the difference in glucose is greater than this, Trio will only adjust Temp Basal Rate and not deliver an SMB that loop cycle." : {
       "localizations" : {
@@ -173524,6 +173543,9 @@
           }
         }
       }
+    },
+    "Minimum" : {
+
     },
     "Minimum duration in minutes for new SMB since last SMB or manual bolus" : {
       "comment" : "\"SMB Interval\"",
@@ -195520,6 +195542,9 @@
         }
       }
     },
+    "Per 10g fat" : {
+
+    },
     "Percent" : {
       "localizations" : {
         "bg" : {
@@ -201726,6 +201751,12 @@
         }
       }
     },
+    "Protein duration factor" : {
+
+    },
+    "Protein peak" : {
+
+    },
     "Protein:" : {
       "localizations" : {
         "bg" : {
@@ -201973,6 +202004,12 @@
           }
         }
       }
+    },
+    "Protein/Fat Activity" : {
+
+    },
+    "Protein/Fat Activity Graph" : {
+
     },
     "Protein/Fat Assist" : {
 
@@ -220716,6 +220753,9 @@
         }
       }
     },
+    "Separate" : {
+
+    },
     "Series" : {
       "localizations" : {
         "bg" : {
@@ -225389,6 +225429,9 @@
         }
       }
     },
+    "Show Protein/Fat on graph" : {
+
+    },
     "Show X-Axis Grid Lines" : {
       "localizations" : {
         "bg" : {
@@ -225760,6 +225803,9 @@
           }
         }
       }
+    },
+    "Shows a visual-only estimate of activity from logged fat and protein meals. It does not affect COB, IOB, predictions, or insulin dosing." : {
+
     },
     "Shows an insulin dose, which can be a small automated dose (super-micro-bolus), a manually entered dose, or one given externally (e.g., a pen shot)." : {
       "localizations" : {
@@ -229537,6 +229583,9 @@
           }
         }
       }
+    },
+    "SMB uplift" : {
+
     },
     "SMB:" : {
       "localizations" : {
@@ -240845,6 +240894,15 @@
           }
         }
       }
+    },
+    "Target adjustment" : {
+
+    },
+    "Target adjustment: -%@" : {
+
+    },
+    "Target adjustment: Off" : {
+
     },
     "Target Behavior" : {
       "localizations" : {
@@ -272468,6 +272526,9 @@
         }
       }
     },
+    "UAM uplift" : {
+
+    },
     "UAMpredBG" : {
       "localizations" : {
         "bg" : {
@@ -277539,6 +277600,9 @@
         }
       }
     },
+    "Use recommended duration" : {
+
+    },
     "Use Sigmoid Function" : {
       "comment" : "Headline Use Sigmoid Function",
       "extractionState" : "manual",
@@ -280186,6 +280250,9 @@
           }
         }
       }
+    },
+    "Visual only. This does not affect COB, IOB, predictions, or insulin dosing." : {
+
     },
     "W" : {
       "comment" : "Abbreviation for week",

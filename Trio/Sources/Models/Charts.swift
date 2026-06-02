@@ -15,3 +15,14 @@ struct ChartData: Identifiable {
     var uam: Double
     var id = UUID()
 }
+
+struct ProteinFatActivityPoint: Identifiable, Equatable {
+    var date: Date
+    var fatActivity: Double
+    var proteinActivity: Double
+    var id = UUID()
+
+    var combinedActivity: Double {
+        fatActivity + proteinActivity
+    }
+}

@@ -18,6 +18,10 @@ extension MealSettings {
         @Published var proteinFatAssistMinutesPer10gFat: Decimal = 30
         @Published var proteinFatAssistMinimumDuration: Decimal = 120
         @Published var proteinFatAssistMaximumDefaultDuration: Decimal = 480
+        @Published var proteinFatActivityGraphDisplay: ProteinFatActivityGraphDisplay = .combined
+        @Published var proteinFatActivityProteinDurationFactor: Decimal = 0.7
+        @Published var proteinFatActivityFatPeakPercent: Decimal = 0.45
+        @Published var proteinFatActivityProteinPeakPercent: Decimal = 0.30
         @Published var minuteInterval: Decimal = 30
         @Published var delay: Decimal = 60
         @Published var maxMealAbsorptionTime: Decimal = 6
@@ -62,6 +66,18 @@ extension MealSettings {
             }
             subscribeSetting(\.proteinFatAssistMaximumDefaultDuration, on: $proteinFatAssistMaximumDefaultDuration) {
                 proteinFatAssistMaximumDefaultDuration = min(max($0, 60), 720)
+            }
+            subscribeSetting(\.proteinFatActivityGraphDisplay, on: $proteinFatActivityGraphDisplay) {
+                proteinFatActivityGraphDisplay = $0
+            }
+            subscribeSetting(\.proteinFatActivityProteinDurationFactor, on: $proteinFatActivityProteinDurationFactor) {
+                proteinFatActivityProteinDurationFactor = min(max($0, 0.1), 1)
+            }
+            subscribeSetting(\.proteinFatActivityFatPeakPercent, on: $proteinFatActivityFatPeakPercent) {
+                proteinFatActivityFatPeakPercent = min(max($0, 0.1), 0.9)
+            }
+            subscribeSetting(\.proteinFatActivityProteinPeakPercent, on: $proteinFatActivityProteinPeakPercent) {
+                proteinFatActivityProteinPeakPercent = min(max($0, 0.1), 0.9)
             }
 
             // "Fat and Protein Delay"

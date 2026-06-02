@@ -116,6 +116,25 @@ enum ProteinFatAssistAggressiveness: String, Codable, CaseIterable, Identifiable
     }
 }
 
+enum ProteinFatActivityGraphDisplay: String, Codable, CaseIterable, Identifiable, Equatable {
+    case off
+    case combined
+    case separate
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .off:
+            return String(localized: "Off")
+        case .combined:
+            return String(localized: "Combined")
+        case .separate:
+            return String(localized: "Separate")
+        }
+    }
+}
+
 struct ProteinFatAssistProfileSettings: Codable, Equatable {
     var isfPercent: Decimal
     var smbMinutesIncrease: Decimal
@@ -182,6 +201,10 @@ struct TrioSettings: JSON, Equatable, Encodable {
     var proteinFatAssistMinutesPer10gFat: Decimal = 30
     var proteinFatAssistMinimumDuration: Decimal = 120
     var proteinFatAssistMaximumDefaultDuration: Decimal = 480
+    var proteinFatActivityGraphDisplay: ProteinFatActivityGraphDisplay = .combined
+    var proteinFatActivityProteinDurationFactor: Decimal = 0.7
+    var proteinFatActivityFatPeakPercent: Decimal = 0.45
+    var proteinFatActivityProteinPeakPercent: Decimal = 0.30
     var individualAdjustmentFactor: Decimal = 0.5
     var minuteInterval: Decimal = 30
     var delay: Decimal = 60
@@ -411,6 +434,34 @@ extension TrioSettings: Decodable {
             forKey: .proteinFatAssistMaximumDefaultDuration
         ) {
             settings.proteinFatAssistMaximumDefaultDuration = min(max(proteinFatAssistMaximumDefaultDuration, 60), 720)
+        }
+
+        if let proteinFatActivityGraphDisplay = try? container.decode(
+            ProteinFatActivityGraphDisplay.self,
+            forKey: .proteinFatActivityGraphDisplay
+        ) {
+            settings.proteinFatActivityGraphDisplay = proteinFatActivityGraphDisplay
+        }
+
+        if let proteinFatActivityProteinDurationFactor = try? container.decode(
+            Decimal.self,
+            forKey: .proteinFatActivityProteinDurationFactor
+        ) {
+            settings.proteinFatActivityProteinDurationFactor = min(max(proteinFatActivityProteinDurationFactor, 0.1), 1)
+        }
+
+        if let proteinFatActivityFatPeakPercent = try? container.decode(
+            Decimal.self,
+            forKey: .proteinFatActivityFatPeakPercent
+        ) {
+            settings.proteinFatActivityFatPeakPercent = min(max(proteinFatActivityFatPeakPercent, 0.1), 0.9)
+        }
+
+        if let proteinFatActivityProteinPeakPercent = try? container.decode(
+            Decimal.self,
+            forKey: .proteinFatActivityProteinPeakPercent
+        ) {
+            settings.proteinFatActivityProteinPeakPercent = min(max(proteinFatActivityProteinPeakPercent, 0.1), 0.9)
         }
 
         if let individualAdjustmentFactor = try? container.decode(Decimal.self, forKey: .individualAdjustmentFactor) {

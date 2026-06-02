@@ -7,6 +7,7 @@ extension MainChartView {
         Chart {
             drawCurrentTimeMarker()
             drawCOBIOBChart()
+            drawProteinFatActivityChart()
 
             if let selectedCOBValue {
                 drawSelectedInnerPoint(
@@ -41,7 +42,10 @@ extension MainChartView {
         }
         .chartForegroundStyleScale([
             "COB": Color.orange,
-            "IOB": Color.darkerBlue
+            "IOB": Color.darkerBlue,
+            "Protein/Fat": Color.gray,
+            "Fat": Color.gray.opacity(0.85),
+            "Protein": Color.gray.opacity(0.45)
         ])
         .chartLegend(.hidden)
         .frame(minHeight: geo.size.height * 0.12)
@@ -57,7 +61,7 @@ extension MainChartView {
         let iobMin = scaleIobAmountForChart(state.minValueIobChart)
         let iobMax = scaleIobAmountForChart(state.maxValueIobChart)
         let minValue = min(state.minValueCobChart, iobMin)
-        let maxValue = max(state.maxValueCobChart, iobMax)
+        let maxValue = max(state.minValueCobChart + state.maxValueProteinFatActivityChart, state.maxValueCobChart, iobMax)
         return Double(minValue) ... Double(maxValue)
     }
 
@@ -137,6 +141,62 @@ extension MainChartView {
             LineMark(x: .value("Time", date), y: .value("Amount", amountIOB))
                 .foregroundStyle(by: .value("Type", "IOB"))
                 .position(by: .value("Axis", "IOB"))
+        }
+    }
+
+    @ChartContentBuilder func drawProteinFatActivityChart() -> some ChartContent {
+        if state.proteinFatActivityGraphDisplay == .combined {
+            ForEach(state.proteinFatActivityPoints) { item in
+                AreaMark(
+                    x: .value("Time", item.date),
+                    y: .value("Activity", item.combinedActivity)
+                )
+                .foregroundStyle(by: .value("Type", "Protein/Fat"))
+                .position(by: .value("Axis", "Protein/Fat"))
+                .opacity(0.18)
+
+                LineMark(
+                    x: .value("Time", item.date),
+                    y: .value("Activity", item.combinedActivity)
+                )
+                .foregroundStyle(by: .value("Type", "Protein/Fat"))
+                .position(by: .value("Axis", "Protein/Fat"))
+                .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
+            }
+        } else if state.proteinFatActivityGraphDisplay == .separate {
+            ForEach(state.proteinFatActivityPoints) { item in
+                AreaMark(
+                    x: .value("Time", item.date),
+                    y: .value("Activity", item.fatActivity)
+                )
+                .foregroundStyle(by: .value("Type", "Fat"))
+                .position(by: .value("Axis", "Fat"))
+                .opacity(0.16)
+
+                LineMark(
+                    x: .value("Time", item.date),
+                    y: .value("Activity", item.fatActivity)
+                )
+                .foregroundStyle(by: .value("Type", "Fat"))
+                .position(by: .value("Axis", "Fat"))
+                .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+
+                AreaMark(
+                    x: .value("Time", item.date),
+                    y: .value("Activity", item.proteinActivity)
+                )
+                .foregroundStyle(by: .value("Type", "Protein"))
+                .position(by: .value("Axis", "Protein"))
+                .opacity(0.12)
+
+                LineMark(
+                    x: .value("Time", item.date),
+                    y: .value("Activity", item.proteinActivity)
+                )
+                .foregroundStyle(by: .value("Type", "Protein"))
+                .position(by: .value("Axis", "Protein"))
+                .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [2, 4]))
+            }
         }
     }
 }

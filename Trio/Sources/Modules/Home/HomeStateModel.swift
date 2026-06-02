@@ -89,6 +89,8 @@ extension Home {
         var latestTwoGlucoseValues: [GlucoseStored] = []
         var carbsFromPersistence: [CarbEntryStored] = []
         var fpusFromPersistence: [CarbEntryStored] = []
+        var proteinFatMealActivityFromPersistence: [CarbEntryStored] = []
+        var proteinFatActivityPoints: [ProteinFatActivityPoint] = []
         var determinationsFromPersistence: [OrefDetermination] = []
         var enactedAndNonEnactedDeterminations: [OrefDetermination] = []
         var fetchedTDDs: [TDD] = []
@@ -127,6 +129,16 @@ extension Home {
 
         var minValueIobChart: Decimal = 0
         var maxValueIobChart: Decimal = 5
+        var maxValueProteinFatActivityChart: Decimal = 0
+
+        var proteinFatActivityGraphDisplay: ProteinFatActivityGraphDisplay = .combined
+        var proteinFatAssistBaseDuration: Decimal = 180
+        var proteinFatAssistMinutesPer10gFat: Decimal = 30
+        var proteinFatAssistMinimumDuration: Decimal = 120
+        var proteinFatAssistMaximumDefaultDuration: Decimal = 480
+        var proteinFatActivityProteinDurationFactor: Decimal = 0.7
+        var proteinFatActivityFatPeakPercent: Decimal = 0.45
+        var proteinFatActivityProteinPeakPercent: Decimal = 0.30
 
         let taskContext = CoreDataStack.shared.newTaskContext()
         let glucoseFetchContext = CoreDataStack.shared.newTaskContext()
@@ -185,6 +197,9 @@ extension Home {
                     }
                     group.addTask {
                         self.setupFPUsArray()
+                    }
+                    group.addTask {
+                        self.setupProteinFatActivityArray()
                     }
                     group.addTask {
                         self.setupDeterminationsArray()
@@ -252,6 +267,7 @@ extension Home {
                 .sink { [weak self] _ in
                     guard let self = self else { return }
                     self.setupFPUsArray()
+                    self.setupProteinFatActivityArray()
                 }
                 .store(in: &subscriptions)
         }
@@ -275,6 +291,7 @@ extension Home {
             coreDataPublisher?.filteredByEntityName("CarbEntryStored").sink { [weak self] _ in
                 guard let self = self else { return }
                 self.setupCarbsArray()
+                self.setupProteinFatActivityArray()
             }.store(in: &subscriptions)
 
             coreDataPublisher?.filteredByEntityName("PumpEventStored").sink { [weak self] _ in
@@ -426,6 +443,14 @@ extension Home {
             thresholdLines = settingsManager.settings.rulerMarks
             showCarbsRequiredBadge = settingsManager.settings.showCarbsRequiredBadge
             forecastDisplayType = settingsManager.settings.forecastDisplayType
+            proteinFatActivityGraphDisplay = settingsManager.settings.proteinFatActivityGraphDisplay
+            proteinFatAssistBaseDuration = settingsManager.settings.proteinFatAssistBaseDuration
+            proteinFatAssistMinutesPer10gFat = settingsManager.settings.proteinFatAssistMinutesPer10gFat
+            proteinFatAssistMinimumDuration = settingsManager.settings.proteinFatAssistMinimumDuration
+            proteinFatAssistMaximumDefaultDuration = settingsManager.settings.proteinFatAssistMaximumDefaultDuration
+            proteinFatActivityProteinDurationFactor = settingsManager.settings.proteinFatActivityProteinDurationFactor
+            proteinFatActivityFatPeakPercent = settingsManager.settings.proteinFatActivityFatPeakPercent
+            proteinFatActivityProteinPeakPercent = settingsManager.settings.proteinFatActivityProteinPeakPercent
             isExerciseModeActive = settingsManager.preferences.exerciseMode
             highTTraisesSens = settingsManager.preferences.highTemptargetRaisesSensitivity
             lowTTlowersSens = settingsManager.preferences.lowTemptargetLowersSensitivity
@@ -690,6 +715,17 @@ extension Home.StateModel:
         bolusDisplayThreshold = settingsManager.settings.bolusDisplayThreshold
         showCarbsRequiredBadge = settingsManager.settings.showCarbsRequiredBadge
         forecastDisplayType = settingsManager.settings.forecastDisplayType
+        proteinFatActivityGraphDisplay = settingsManager.settings.proteinFatActivityGraphDisplay
+        proteinFatAssistBaseDuration = settingsManager.settings.proteinFatAssistBaseDuration
+        proteinFatAssistMinutesPer10gFat = settingsManager.settings.proteinFatAssistMinutesPer10gFat
+        proteinFatAssistMinimumDuration = settingsManager.settings.proteinFatAssistMinimumDuration
+        proteinFatAssistMaximumDefaultDuration = settingsManager.settings.proteinFatAssistMaximumDefaultDuration
+        proteinFatActivityProteinDurationFactor = settingsManager.settings.proteinFatActivityProteinDurationFactor
+        proteinFatActivityFatPeakPercent = settingsManager.settings.proteinFatActivityFatPeakPercent
+        proteinFatActivityProteinPeakPercent = settingsManager.settings.proteinFatActivityProteinPeakPercent
+        Task { @MainActor in
+            self.setupProteinFatActivityPoints()
+        }
         cgmAvailable = (fetchGlucoseManager.cgmGlucoseSourceType != CGMType.none)
         displayPumpStatusHighlightMessage()
         displayPumpStatusBadge()

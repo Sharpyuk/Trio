@@ -280,6 +280,8 @@ extension MealSettings {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
+                    proteinFatActivityGraphSettings
+
                     proteinFatAssistDurationDefaults
 
                     ForEach(ProteinFatAssistAggressiveness.presetCases) { profile in
@@ -395,6 +397,72 @@ extension MealSettings {
             .navigationBarTitle("Meal Settings")
             .navigationBarTitleDisplayMode(.automatic)
             .settingsHighlightScroll()
+        }
+
+        @ViewBuilder private var proteinFatActivityGraphSettings: some View {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Protein/Fat Activity Graph")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+
+                Picker("Show Protein/Fat on graph", selection: $state.proteinFatActivityGraphDisplay) {
+                    ForEach(ProteinFatActivityGraphDisplay.allCases) { display in
+                        Text(display.displayName).tag(display)
+                    }
+                }
+                .pickerStyle(.menu)
+
+                Text("Visual only. This does not affect COB, IOB, predictions, or insulin dosing.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                proteinFatAssistEffectRow(
+                    title: "Protein duration factor",
+                    value: state.proteinFatActivityProteinDurationFactor.formatted(
+                        .number.precision(.fractionLength(2))
+                    ),
+                    decrement: {
+                        state.proteinFatActivityProteinDurationFactor = max(
+                            0.1,
+                            state.proteinFatActivityProteinDurationFactor - 0.05
+                        )
+                    },
+                    increment: {
+                        state.proteinFatActivityProteinDurationFactor = min(
+                            1,
+                            state.proteinFatActivityProteinDurationFactor + 0.05
+                        )
+                    }
+                )
+
+                proteinFatAssistEffectRow(
+                    title: "Fat peak",
+                    value: "\(Int(truncating: (state.proteinFatActivityFatPeakPercent * 100) as NSNumber))%",
+                    decrement: {
+                        state.proteinFatActivityFatPeakPercent = max(0.1, state.proteinFatActivityFatPeakPercent - 0.05)
+                    },
+                    increment: {
+                        state.proteinFatActivityFatPeakPercent = min(0.9, state.proteinFatActivityFatPeakPercent + 0.05)
+                    }
+                )
+
+                proteinFatAssistEffectRow(
+                    title: "Protein peak",
+                    value: "\(Int(truncating: (state.proteinFatActivityProteinPeakPercent * 100) as NSNumber))%",
+                    decrement: {
+                        state.proteinFatActivityProteinPeakPercent = max(
+                            0.1,
+                            state.proteinFatActivityProteinPeakPercent - 0.05
+                        )
+                    },
+                    increment: {
+                        state.proteinFatActivityProteinPeakPercent = min(
+                            0.9,
+                            state.proteinFatActivityProteinPeakPercent + 0.05
+                        )
+                    }
+                )
+            }
         }
 
         @ViewBuilder private var proteinFatAssistDurationDefaults: some View {

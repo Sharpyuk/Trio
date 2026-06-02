@@ -164,6 +164,15 @@ struct ChartLegendView: View {
                             color: Color.orange.opacity(0.8),
                             iconString: "line.diagonal"
                         )
+
+                        DefinitionRow(
+                            term: String(localized: "Protein/Fat Activity"),
+                            definition: Text(
+                                "Shows a visual-only estimate of activity from logged fat and protein meals. It does not affect COB, IOB, predictions, or insulin dosing."
+                            ),
+                            color: Color.gray.opacity(0.8),
+                            iconString: "line.diagonal"
+                        )
                     }.listRowBackground(Color.gray.opacity(0.1))
                 }
                 .scrollContentBackground(.hidden)
