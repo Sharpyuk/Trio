@@ -168,9 +168,27 @@ struct ChartLegendView: View {
                         DefinitionRow(
                             term: String(localized: "Protein/Fat Activity"),
                             definition: Text(
-                                "Shows a visual-only estimate of activity from logged fat and protein meals. It does not affect COB, IOB, predictions, or insulin dosing."
+                                "Shows a visual-only estimate of remaining activity from logged fat and protein meals. It does not affect COB, IOB, predictions, or insulin dosing."
                             ),
                             color: Color.gray.opacity(0.8),
+                            iconString: "line.diagonal"
+                        )
+
+                        DefinitionRow(
+                            term: String(localized: "Fat Activity"),
+                            definition: Text(
+                                "Shows logged fat as a visual remaining-on-board line when Protein/Fat Activity is set to Separate."
+                            ),
+                            color: Color.gray.opacity(0.9),
+                            iconString: "line.diagonal"
+                        )
+
+                        DefinitionRow(
+                            term: String(localized: "Protein Activity"),
+                            definition: Text(
+                                "Shows logged protein as a visual remaining-on-board line when Protein/Fat Activity is set to Separate."
+                            ),
+                            color: Color.brown.opacity(0.55),
                             iconString: "line.diagonal"
                         )
                     }.listRowBackground(Color.gray.opacity(0.1))

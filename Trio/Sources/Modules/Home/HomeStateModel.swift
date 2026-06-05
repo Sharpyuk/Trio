@@ -137,8 +137,6 @@ extension Home {
         var proteinFatAssistMinimumDuration: Decimal = 120
         var proteinFatAssistMaximumDefaultDuration: Decimal = 480
         var proteinFatActivityProteinDurationFactor: Decimal = 0.7
-        var proteinFatActivityFatPeakPercent: Decimal = 0.45
-        var proteinFatActivityProteinPeakPercent: Decimal = 0.30
 
         let taskContext = CoreDataStack.shared.newTaskContext()
         let glucoseFetchContext = CoreDataStack.shared.newTaskContext()
@@ -449,8 +447,6 @@ extension Home {
             proteinFatAssistMinimumDuration = settingsManager.settings.proteinFatAssistMinimumDuration
             proteinFatAssistMaximumDefaultDuration = settingsManager.settings.proteinFatAssistMaximumDefaultDuration
             proteinFatActivityProteinDurationFactor = settingsManager.settings.proteinFatActivityProteinDurationFactor
-            proteinFatActivityFatPeakPercent = settingsManager.settings.proteinFatActivityFatPeakPercent
-            proteinFatActivityProteinPeakPercent = settingsManager.settings.proteinFatActivityProteinPeakPercent
             isExerciseModeActive = settingsManager.preferences.exerciseMode
             highTTraisesSens = settingsManager.preferences.highTemptargetRaisesSensitivity
             lowTTlowersSens = settingsManager.preferences.lowTemptargetLowersSensitivity
@@ -721,8 +717,6 @@ extension Home.StateModel:
         proteinFatAssistMinimumDuration = settingsManager.settings.proteinFatAssistMinimumDuration
         proteinFatAssistMaximumDefaultDuration = settingsManager.settings.proteinFatAssistMaximumDefaultDuration
         proteinFatActivityProteinDurationFactor = settingsManager.settings.proteinFatActivityProteinDurationFactor
-        proteinFatActivityFatPeakPercent = settingsManager.settings.proteinFatActivityFatPeakPercent
-        proteinFatActivityProteinPeakPercent = settingsManager.settings.proteinFatActivityProteinPeakPercent
         Task { @MainActor in
             self.setupProteinFatActivityPoints()
         }

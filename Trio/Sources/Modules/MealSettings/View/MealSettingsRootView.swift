@@ -434,34 +434,6 @@ extension MealSettings {
                         )
                     }
                 )
-
-                proteinFatAssistEffectRow(
-                    title: "Fat peak",
-                    value: "\(Int(truncating: (state.proteinFatActivityFatPeakPercent * 100) as NSNumber))%",
-                    decrement: {
-                        state.proteinFatActivityFatPeakPercent = max(0.1, state.proteinFatActivityFatPeakPercent - 0.05)
-                    },
-                    increment: {
-                        state.proteinFatActivityFatPeakPercent = min(0.9, state.proteinFatActivityFatPeakPercent + 0.05)
-                    }
-                )
-
-                proteinFatAssistEffectRow(
-                    title: "Protein peak",
-                    value: "\(Int(truncating: (state.proteinFatActivityProteinPeakPercent * 100) as NSNumber))%",
-                    decrement: {
-                        state.proteinFatActivityProteinPeakPercent = max(
-                            0.1,
-                            state.proteinFatActivityProteinPeakPercent - 0.05
-                        )
-                    },
-                    increment: {
-                        state.proteinFatActivityProteinPeakPercent = min(
-                            0.9,
-                            state.proteinFatActivityProteinPeakPercent + 0.05
-                        )
-                    }
-                )
             }
         }
 

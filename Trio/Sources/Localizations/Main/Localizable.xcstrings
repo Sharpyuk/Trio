@@ -120596,6 +120596,9 @@
         }
       }
     },
+    "Fat Activity" : {
+
+    },
     "Fat and Protein" : {
       "comment" : "FPU Settings Title",
       "extractionState" : "manual",
@@ -121231,9 +121234,6 @@
           }
         }
       }
-    },
-    "Fat peak" : {
-
     },
     "Fat-Protein Carb Equivalent" : {
       "localizations" : {
@@ -201627,6 +201627,9 @@
         }
       }
     },
+    "Protein Activity" : {
+
+    },
     "Protein Conversion" : {
       "localizations" : {
         "bg" : {
@@ -201752,9 +201755,6 @@
       }
     },
     "Protein duration factor" : {
-
-    },
-    "Protein peak" : {
 
     },
     "Protein:" : {
@@ -225804,7 +225804,7 @@
         }
       }
     },
-    "Shows a visual-only estimate of activity from logged fat and protein meals. It does not affect COB, IOB, predictions, or insulin dosing." : {
+    "Shows a visual-only estimate of remaining activity from logged fat and protein meals. It does not affect COB, IOB, predictions, or insulin dosing." : {
 
     },
     "Shows an insulin dose, which can be a small automated dose (super-micro-bolus), a manually entered dose, or one given externally (e.g., a pen shot)." : {
@@ -226054,6 +226054,12 @@
           }
         }
       }
+    },
+    "Shows logged fat as a visual remaining-on-board line when Protein/Fat Activity is set to Separate." : {
+
+    },
+    "Shows logged protein as a visual remaining-on-board line when Protein/Fat Activity is set to Separate." : {
+
     },
     "Shows the COB value calculated by the algorithm at a specific time in the past. These values are snapshots and won’t change if carbs are added or removed after the fact." : {
       "localizations" : {

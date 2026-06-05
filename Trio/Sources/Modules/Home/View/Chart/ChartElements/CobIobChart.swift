@@ -44,8 +44,8 @@ extension MainChartView {
             "COB": Color.orange,
             "IOB": Color.darkerBlue,
             "Protein/Fat": Color.gray,
-            "Fat": Color.gray.opacity(0.85),
-            "Protein": Color.gray.opacity(0.45)
+            "Fat": Color.gray.opacity(0.9),
+            "Protein": Color.brown.opacity(0.55)
         ])
         .chartLegend(.hidden)
         .frame(minHeight: geo.size.height * 0.12)
@@ -61,7 +61,7 @@ extension MainChartView {
         let iobMin = scaleIobAmountForChart(state.minValueIobChart)
         let iobMax = scaleIobAmountForChart(state.maxValueIobChart)
         let minValue = min(state.minValueCobChart, iobMin)
-        let maxValue = max(state.minValueCobChart + state.maxValueProteinFatActivityChart, state.maxValueCobChart, iobMax)
+        let maxValue = max(state.maxValueProteinFatActivityChart, state.maxValueCobChart, iobMax)
         return Double(minValue) ... Double(maxValue)
     }
 

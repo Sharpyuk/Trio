@@ -126,14 +126,23 @@ extension Home.StateModel {
         }
 
         let pointInterval: TimeInterval = 10 * 60
-        let visualScale = 0.2
-        let fatPeak = doubleValue(proteinFatActivityFatPeakPercent).clamped(to: 0.1 ... 0.9)
-        let proteinPeak = doubleValue(proteinFatActivityProteinPeakPercent).clamped(to: 0.1 ... 0.9)
+        let visualScale = 0.5
         let proteinDurationFactor = doubleValue(proteinFatActivityProteinDurationFactor).clamped(to: 0.1 ... 1)
 
-        var points: [ProteinFatActivityPoint] = []
+        var pointDates: Set<Date> = []
         var cursor = startMarker
         while cursor <= endMarker {
+            pointDates.insert(cursor)
+            cursor = cursor.addingTimeInterval(pointInterval)
+        }
+
+        for meal in meals {
+            guard let mealDate = meal.date, mealDate >= startMarker, mealDate <= endMarker else { continue }
+            pointDates.insert(mealDate)
+        }
+
+        var points: [ProteinFatActivityPoint] = []
+        for date in pointDates.sorted() {
             var fatActivity = 0.0
             var proteinActivity = 0.0
 
@@ -146,30 +155,27 @@ extension Home.StateModel {
                 let fatDuration = proteinFatActivityDuration(for: meal)
                 let proteinDuration = max(60 * 60, fatDuration * proteinDurationFactor)
 
-                fatActivity += proteinFatTriangularActivity(
+                fatActivity += proteinFatRemainingActivity(
                     grams: fat,
                     mealDate: mealDate,
-                    at: cursor,
-                    duration: fatDuration,
-                    peakPercent: fatPeak
+                    at: date,
+                    duration: fatDuration
                 )
-                proteinActivity += proteinFatTriangularActivity(
+                proteinActivity += proteinFatRemainingActivity(
                     grams: protein,
                     mealDate: mealDate,
-                    at: cursor,
-                    duration: proteinDuration,
-                    peakPercent: proteinPeak
+                    at: date,
+                    duration: proteinDuration
                 )
             }
 
             points.append(
                 ProteinFatActivityPoint(
-                    date: cursor,
+                    date: date,
                     fatActivity: fatActivity * visualScale,
                     proteinActivity: proteinActivity * visualScale
                 )
             )
-            cursor = cursor.addingTimeInterval(pointInterval)
         }
 
         proteinFatActivityPoints = points
@@ -198,23 +204,17 @@ extension Home.StateModel {
         return Double(minutesText).map { min(max($0, 60), 720) }
     }
 
-    private func proteinFatTriangularActivity(
+    private func proteinFatRemainingActivity(
         grams: Double,
         mealDate: Date,
         at date: Date,
-        duration: TimeInterval,
-        peakPercent: Double
+        duration: TimeInterval
     ) -> Double {
         guard grams > 0, duration > 0 else { return 0 }
         let elapsed = date.timeIntervalSince(mealDate)
         guard elapsed >= 0, elapsed <= duration else { return 0 }
 
-        let peakTime = duration * peakPercent
-        if elapsed <= peakTime {
-            return grams * elapsed / max(peakTime, 1)
-        }
-
-        return grams * max(0, duration - elapsed) / max(duration - peakTime, 1)
+        return grams * max(0, duration - elapsed) / duration
     }
 
     private func doubleValue(_ value: Decimal) -> Double {
