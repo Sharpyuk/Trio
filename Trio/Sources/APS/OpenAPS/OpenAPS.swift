@@ -508,15 +508,11 @@ final class OpenAPS {
             let twoHoursAgo = Date().addingTimeInterval(-2.hours.timeInterval)
             let historicalTDDData = try self.fetchHistoricalTDDData(from: tenDaysAgo)
 
-            // Fetch the last active Override
+            // Fetch active overrides and explicitly derive the effective override.
+            // Exercise Override and Protein/Fat Assist may coexist; normal overrides remain exclusive.
             let activeOverrides = try self.fetchActiveOverrides()
-            let isOverrideActive = activeOverrides.first?.enabled ?? false
-            let overridePercentage = Decimal(activeOverrides.first?.percentage ?? 100)
-            let isOverrideIndefinite = activeOverrides.first?.indefinite ?? true
-            let disableSMBs = activeOverrides.first?.smbIsOff ?? false
-            let overrideTargetBG = activeOverrides.first?.target?.decimalValue ?? 0
-            let effectiveExerciseSensitivityPercent = activeOverrides.first?
-                .effectivePostExerciseSensitivityPercent(at: Date()) ?? 0
+            let effectiveOverride = self.effectiveOverride(from: activeOverrides, at: Date())
+            let effectiveExerciseSensitivityPercent = effectiveOverride.exerciseSensitivityPercent
             let exerciseSensitivityMultiplier = 1 + effectiveExerciseSensitivityPercent / 100
 
             // Calculate averages for Total Daily Dose (TDD)
@@ -543,21 +539,21 @@ final class OpenAPS {
                 currentTDD: currentTDD,
                 past2hoursAverage: currentTDD > 0 ? averageTDDLastTwoHours : 0,
                 date: Date(),
-                overridePercentage: overridePercentage,
-                useOverride: isOverrideActive,
-                duration: activeOverrides.first?.duration?.decimalValue ?? 0,
-                unlimited: isOverrideIndefinite,
-                overrideTarget: overrideTargetBG,
-                smbIsOff: disableSMBs,
-                advancedSettings: activeOverrides.first?.advancedSettings ?? false,
-                isfAndCr: activeOverrides.first?.isfAndCr ?? false,
-                isf: activeOverrides.first?.isf ?? false,
-                cr: activeOverrides.first?.cr ?? false,
-                smbIsScheduledOff: activeOverrides.first?.smbIsScheduledOff ?? false,
-                start: (activeOverrides.first?.start ?? 0) as Decimal,
-                end: (activeOverrides.first?.end ?? 0) as Decimal,
-                smbMinutes: activeOverrides.first?.smbMinutes?.decimalValue ?? maxSMBBasalMinutes,
-                uamMinutes: activeOverrides.first?.uamMinutes?.decimalValue ?? maxUAMBasalMinutes,
+                overridePercentage: effectiveOverride.percentage,
+                useOverride: effectiveOverride.isActive,
+                duration: effectiveOverride.duration,
+                unlimited: effectiveOverride.indefinite,
+                overrideTarget: effectiveOverride.target,
+                smbIsOff: effectiveOverride.smbIsOff,
+                advancedSettings: effectiveOverride.advancedSettings,
+                isfAndCr: effectiveOverride.isfAndCr,
+                isf: effectiveOverride.isf,
+                cr: effectiveOverride.cr,
+                smbIsScheduledOff: effectiveOverride.smbIsScheduledOff,
+                start: effectiveOverride.start,
+                end: effectiveOverride.end,
+                smbMinutes: effectiveOverride.smbMinutes ?? maxSMBBasalMinutes,
+                uamMinutes: effectiveOverride.uamMinutes ?? maxUAMBasalMinutes,
                 exerciseSensitivityMultiplier: exerciseSensitivityMultiplier
             )
 
@@ -960,6 +956,122 @@ final class OpenAPS {
 
 // Non-Async fetch methods for trio_custom_oref_variables
 extension OpenAPS {
+    private struct EffectiveOverride {
+        var isActive = false
+        var percentage: Decimal = 100
+        var duration: Decimal = 0
+        var indefinite = true
+        var target: Decimal = 0
+        var smbIsOff = false
+        var advancedSettings = false
+        var isfAndCr = false
+        var isf = false
+        var cr = false
+        var smbIsScheduledOff = false
+        var start: Decimal = 0
+        var end: Decimal = 0
+        var smbMinutes: Decimal?
+        var uamMinutes: Decimal?
+        var exerciseSensitivityPercent: Decimal = 0
+
+        init() {}
+
+        init(override: OverrideStored, now: Date) {
+            isActive = override.enabled
+            percentage = Decimal(override.percentage)
+            duration = override.duration?.decimalValue ?? 0
+            indefinite = override.indefinite
+            target = override.target?.decimalValue ?? 0
+            smbIsOff = override.smbIsOff
+            advancedSettings = override.advancedSettings
+            isfAndCr = override.isfAndCr
+            isf = override.isf
+            cr = override.cr
+            smbIsScheduledOff = override.smbIsScheduledOff
+            start = override.start?.decimalValue ?? 0
+            end = override.end?.decimalValue ?? 0
+            smbMinutes = override.smbMinutes?.decimalValue
+            uamMinutes = override.uamMinutes?.decimalValue
+            exerciseSensitivityPercent = override.effectivePostExerciseSensitivityPercent(at: now)
+        }
+    }
+
+    private func effectiveOverride(from activeOverrides: [OverrideStored], at now: Date) -> EffectiveOverride {
+        guard !activeOverrides.isEmpty else {
+            debug(.openAPS, "Effective override: none")
+            return EffectiveOverride()
+        }
+
+        let normalOverrides = activeOverrides.filter { !$0.isExerciseMode && !$0.currentProteinFatAssist }
+        if let normalOverride = normalOverrides.first {
+            debug(
+                .openAPS,
+                "Effective override: normal override '\(normalOverride.name ?? "Unknown")' is exclusive; ignoring Exercise/Protein-Fat Assist effects"
+            )
+            return EffectiveOverride(override: normalOverride, now: now)
+        }
+
+        let exerciseOverride = activeOverrides.first { $0.isExerciseMode }
+        let proteinFatAssistOverride = activeOverrides.first { $0.currentProteinFatAssist }
+
+        guard let exerciseOverride else {
+            if let proteinFatAssistOverride {
+                debug(
+                    .openAPS,
+                    "Effective override: Protein/Fat Assist '\(proteinFatAssistOverride.name ?? "Unknown")' applied"
+                )
+                return EffectiveOverride(override: proteinFatAssistOverride, now: now)
+            }
+
+            debug(.openAPS, "Effective override: no supported active override")
+            return EffectiveOverride()
+        }
+
+        var effective = EffectiveOverride(override: exerciseOverride, now: now)
+        guard let proteinFatAssistOverride else {
+            debug(.openAPS, "Effective override: Exercise '\(exerciseOverride.name ?? "Unknown")' applied")
+            return effective
+        }
+
+        let exerciseTarget = exerciseOverride.target?.decimalValue ?? 0
+        let proteinFatTarget = proteinFatAssistOverride.target?.decimalValue ?? 0
+        if proteinFatTarget > 0 {
+            let mergedTarget = exerciseTarget > 0 ? max(exerciseTarget, proteinFatTarget) : proteinFatTarget
+            if mergedTarget != effective.target {
+                debug(
+                    .openAPS,
+                    "Effective override: Exercise + Protein/Fat target merged to safer target \(mergedTarget)"
+                )
+                effective.target = mergedTarget
+            }
+        }
+
+        effective.smbIsOff = exerciseOverride.smbIsOff || proteinFatAssistOverride.smbIsOff
+        if exerciseOverride.smbIsOff {
+            debug(.openAPS, "Effective override: Protein/Fat SMB/UAM ignored because Exercise disables SMBs")
+            return effective
+        }
+
+        let exerciseReducesInsulin = exerciseOverride.percentage < 100
+        let exerciseUsesSafetyTarget = exerciseTarget > 0
+        guard !exerciseReducesInsulin, !exerciseUsesSafetyTarget else {
+            debug(
+                .openAPS,
+                "Effective override: Protein/Fat ISF/SMB/UAM suppressed during Exercise safety phase"
+            )
+            return effective
+        }
+
+        if proteinFatAssistOverride.advancedSettings {
+            effective.advancedSettings = true
+            effective.smbMinutes = proteinFatAssistOverride.smbMinutes?.decimalValue ?? effective.smbMinutes
+            effective.uamMinutes = proteinFatAssistOverride.uamMinutes?.decimalValue ?? effective.uamMinutes
+            debug(.openAPS, "Effective override: Protein/Fat SMB/UAM caps applied with Exercise because SMBs are allowed")
+        }
+
+        return effective
+    }
+
     func fetchActiveTempTargets() throws -> [TempTargetStored] {
         try CoreDataStack.shared.fetchEntities(
             ofType: TempTargetStored.self,
@@ -981,7 +1093,7 @@ extension OpenAPS {
             fetchLimit: 0
         ) as? [OverrideStored] ?? []
 
-        return results.filter { $0.isActive() }.prefix(1).map { $0 }
+        return results.filter { $0.isActive() }
     }
 
     func fetchHistoricalTDDData(from date: Date) throws -> [[String: Any]] {

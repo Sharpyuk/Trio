@@ -341,6 +341,48 @@ extension Adjustments.StateModel {
         }
     }
 
+    @MainActor func disableActiveNormalOverrides(createOverrideRunEntry: Bool) async {
+        do {
+            let ids = try await overrideStorage.loadLatestOverrideConfigurations(fetchLimit: 0)
+            let activeOverrides = try ids.compactMap { id in
+                try viewContext.existingObject(with: id) as? OverrideStored
+            }
+            let normalOverrides = activeOverrides.filter { !$0.isExerciseMode && !$0.currentProteinFatAssist }
+            guard !normalOverrides.isEmpty else { return }
+
+            for overrideToCancel in normalOverrides {
+                if createOverrideRunEntry {
+                    let newOverrideRunStored = OverrideRunStored(context: viewContext)
+                    newOverrideRunStored.id = UUID(uuidString: overrideToCancel.id ?? "") ?? UUID()
+                    newOverrideRunStored.name = overrideToCancel.name
+                    newOverrideRunStored.startDate = overrideToCancel.date ?? .distantPast
+                    newOverrideRunStored.endDate = Date()
+                    newOverrideRunStored.target = NSDecimalNumber(
+                        decimal: overrideStorage.calculateTarget(override: overrideToCancel)
+                    )
+                    newOverrideRunStored.override = overrideToCancel
+                    newOverrideRunStored.isUploadedToNS = false
+                }
+
+                overrideToCancel.enabled = false
+                debug(
+                    .default,
+                    "Exercise Override start disabled normal override \(overrideToCancel.name ?? "Unknown")"
+                )
+            }
+
+            if viewContext.hasChanges {
+                try viewContext.save()
+                updateLatestOverrideConfiguration()
+            }
+        } catch {
+            debug(
+                .default,
+                "\(DebuggingIdentifiers.failed) Failed to disable normal overrides: \(error)"
+            )
+        }
+    }
+
     // MARK: - Save Overrides
 
     /// Saves a custom Override and activates it.
@@ -523,7 +565,7 @@ extension Adjustments.StateModel {
 
             if initialStart <= now.addingTimeInterval(60) {
                 markActiveExerciseRecoveriesEnded(at: now)
-                await disableAllActiveOverrides(createOverrideRunEntry: true)
+                await disableActiveNormalOverrides(createOverrideRunEntry: true)
             }
 
             try await overrideStorage.storeOverride(override: exerciseOverride(
@@ -566,6 +608,8 @@ extension Adjustments.StateModel {
             }
 
             let now = Date()
+            await disableActiveNormalOverrides(createOverrideRunEntry: true)
+
             if preExerciseOverride.date != nil,
                let metadata = ExerciseSessionMetadataStore.load(sessionID: sessionID)
             {
@@ -788,6 +832,8 @@ extension Adjustments.StateModel {
 
                 switch metadata.state(at: now) {
                 case .exerciseActive where override.exercisePhase == .preExercise:
+                    await disableActiveNormalOverrides(createOverrideRunEntry: true)
+
                     let settings = metadata.exerciseSettings
                     override.name = OverrideStored.exerciseOverrideName(
                         type: override.exerciseTypeName ?? metadata.exerciseTypeName,

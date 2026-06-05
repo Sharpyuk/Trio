@@ -802,6 +802,8 @@ extension Treatments {
             aggressiveness: ProteinFatAssistAggressiveness,
             profile: ProteinFatAssistProfileSettings
         ) async throws {
+            await disableActiveNormalOverridesForProteinFatAssist()
+
             let profile = profile.sanitized
             let targetBase = currentBGTarget > 0 ? currentBGTarget : 100
             let target = profile.targetAdjustmentEnabled ? max(72, min(270, targetBase - profile.targetAdjustmentMgDL)) : 0
@@ -838,6 +840,46 @@ extension Treatments {
                 .default,
                 "Protein/Fat Assist started: duration=\(duration)m profile=\(aggressiveness.rawValue) targetEnabled=\(profile.targetAdjustmentEnabled) target=\(target) isf=\(profile.isfPercent)% smb=\(smbMinutes)m uam=\(uamMinutes)m"
             )
+        }
+
+        @MainActor private func disableActiveNormalOverridesForProteinFatAssist() async {
+            do {
+                let ids = try await overrideStorage.loadLatestOverrideConfigurations(fetchLimit: 0)
+                let activeOverrides = try ids.compactMap { id in
+                    try viewContext.existingObject(with: id) as? OverrideStored
+                }
+                let normalOverrides = activeOverrides.filter { !$0.isExerciseMode && !$0.currentProteinFatAssist }
+                guard !normalOverrides.isEmpty else { return }
+
+                for overrideToCancel in normalOverrides {
+                    let newOverrideRunStored = OverrideRunStored(context: viewContext)
+                    newOverrideRunStored.id = UUID(uuidString: overrideToCancel.id ?? "") ?? UUID()
+                    newOverrideRunStored.name = overrideToCancel.name
+                    newOverrideRunStored.startDate = overrideToCancel.date ?? .distantPast
+                    newOverrideRunStored.endDate = Date()
+                    newOverrideRunStored.target = NSDecimalNumber(
+                        decimal: overrideStorage.calculateTarget(override: overrideToCancel)
+                    )
+                    newOverrideRunStored.override = overrideToCancel
+                    newOverrideRunStored.isUploadedToNS = false
+
+                    overrideToCancel.enabled = false
+                    debug(
+                        .default,
+                        "Protein/Fat Assist start disabled normal override \(overrideToCancel.name ?? "Unknown")"
+                    )
+                }
+
+                if viewContext.hasChanges {
+                    try viewContext.save()
+                    Foundation.NotificationCenter.default.post(name: .didUpdateOverrideConfiguration, object: nil)
+                }
+            } catch {
+                debug(
+                    .default,
+                    "\(DebuggingIdentifiers.failed) Failed to disable normal overrides before Protein/Fat Assist: \(error)"
+                )
+            }
         }
 
         var effectiveProteinFatAssistProfile: ProteinFatAssistProfileSettings {
