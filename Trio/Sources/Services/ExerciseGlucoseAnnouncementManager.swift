@@ -507,22 +507,30 @@ final class ExerciseGlucoseAnnouncementManager: NSObject {
     private var lastUrgentAnnouncementDate: Date?
     private var activeSessionID: String?
     private var lastGuardrailGlucoseDateBySession: [String: Date] = [:]
+    private var speechAudioSessionActive = false
 
     override private init() {
         super.init()
+        synthesizer.delegate = self
     }
 
     func startMonitoring() {
-        guard timer == nil else { return }
+        if let timer, timer.isValid {
+            return
+        }
         reconcileExerciseSessions(reason: "startMonitoring")
-        timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 30, repeats: true) { [weak self] _ in
             self?.evaluate()
         }
+        timer.tolerance = 5
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
         evaluate()
     }
 
     func stopSpeech() {
         synthesizer.stopSpeaking(at: .immediate)
+        deactivateSpeechAudioSession()
     }
 
     func evaluate() {
@@ -569,12 +577,14 @@ final class ExerciseGlucoseAnnouncementManager: NSObject {
         let intervalDue = lastAnnouncementDate == nil || now.timeIntervalSince(lastAnnouncementDate!) >= interval
 
         guard urgentDue || intervalDue else { return }
-        speak(
+        guard speak(
             latest: latest,
             trend: trendInfo.trend,
             rateMgdlPerMinute: trendInfo.rate,
             settings: metadata.announcementSettings
-        )
+        ) else {
+            return
+        }
         lastAnnouncementDate = now
         if urgentDue {
             lastUrgentAnnouncementDate = now
@@ -783,6 +793,7 @@ final class ExerciseGlucoseAnnouncementManager: NSObject {
 
     private func speakGuardrailWarning(latest: GlucoseStored, trend: ExerciseGlucoseTrend, units: GlucoseUnits) {
         guard !synthesizer.isSpeaking else { return }
+        prepareSpeechAudioSession()
         let glucose = Decimal(Int(latest.glucose))
         let display = displayGlucoseValue(rawMgdl: glucose, units: units)
         let text = units == .mmolL
@@ -857,13 +868,13 @@ final class ExerciseGlucoseAnnouncementManager: NSObject {
         return changed
     }
 
-    private func speak(
+    @discardableResult private func speak(
         latest: GlucoseStored,
         trend: ExerciseGlucoseTrend,
         rateMgdlPerMinute: Decimal?,
         settings: ExerciseAnnouncementSettings
-    ) {
-        guard !synthesizer.isSpeaking else { return }
+    ) -> Bool {
+        guard !synthesizer.isSpeaking else { return false }
 
         let glucose = Decimal(Int(latest.glucose))
         let units = settings.units
@@ -892,7 +903,34 @@ final class ExerciseGlucoseAnnouncementManager: NSObject {
         let utterance = AVSpeechUtterance(string: parts.joined(separator: ", ") + ".")
         utterance.voice = AVSpeechSynthesisVoice(language: Locale.current.identifier)
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate
+        prepareSpeechAudioSession()
         synthesizer.speak(utterance)
+        return true
+    }
+
+    private func prepareSpeechAudioSession() {
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(
+                .playback,
+                mode: .spokenAudio,
+                options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers]
+            )
+            try session.setActive(true)
+            speechAudioSessionActive = true
+        } catch {
+            debugPrint("Exercise glucose announcement audio session activation failed: \(error)")
+        }
+    }
+
+    private func deactivateSpeechAudioSession() {
+        guard speechAudioSessionActive else { return }
+        do {
+            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        } catch {
+            debugPrint("Exercise glucose announcement audio session deactivation failed: \(error)")
+        }
+        speechAudioSessionActive = false
     }
 
     private func isUrgent(
@@ -974,6 +1012,7 @@ final class ExerciseGlucoseAnnouncementManager: NSObject {
             : NSPredicate(format: "enabled == %@ AND id IN %@", true as NSNumber, sessionIDs)
         let overrides = (try? context.fetch(request)) ?? []
         let now = Date()
+        var changed = false
 
         for override in overrides {
             guard let sessionID = override.id,
@@ -999,16 +1038,19 @@ final class ExerciseGlucoseAnnouncementManager: NSObject {
                 override.isUploadedToNS = false
                 metadata.actualExerciseStart = override.date
                 try? ExerciseSessionMetadataStore.save(metadata)
+                changed = true
                 debugPrint("ExerciseOverride session \(sessionID) announcement-manager auto-start at \(override.date ?? now)")
 
             case .completed where override.exercisePhase == .postExercise:
                 override.enabled = false
                 override.isUploadedToNS = false
+                changed = true
                 debugPrint("ExerciseOverride session \(sessionID) announcement-manager expired recovery")
 
             case .cancelled:
                 override.enabled = false
                 override.isUploadedToNS = false
+                changed = true
 
             default:
                 break
@@ -1017,6 +1059,9 @@ final class ExerciseGlucoseAnnouncementManager: NSObject {
 
         if context.hasChanges {
             try? context.save()
+        }
+        if changed {
+            Foundation.NotificationCenter.default.post(name: .didUpdateOverrideConfiguration, object: nil)
         }
     }
 
@@ -1067,5 +1112,15 @@ final class ExerciseGlucoseAnnouncementManager: NSObject {
 
     private func displayGlucoseValue(rawMgdl: Decimal, units: GlucoseUnits) -> Decimal {
         units == .mgdL ? rawMgdl : rawMgdl.asMmolL
+    }
+}
+
+extension ExerciseGlucoseAnnouncementManager: AVSpeechSynthesizerDelegate {
+    func speechSynthesizer(_: AVSpeechSynthesizer, didFinish _: AVSpeechUtterance) {
+        deactivateSpeechAudioSession()
+    }
+
+    func speechSynthesizer(_: AVSpeechSynthesizer, didCancel _: AVSpeechUtterance) {
+        deactivateSpeechAudioSession()
     }
 }

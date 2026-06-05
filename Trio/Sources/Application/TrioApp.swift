@@ -366,6 +366,7 @@ extension Notification.Name {
                 }
                 if initState.complete {
                     performCleanupIfNecessary()
+                    ExerciseGlucoseAnnouncementManager.shared.startMonitoring()
                     ExerciseGlucoseAnnouncementManager.shared.reconcileExerciseSessions(reason: "appForeground")
                 }
                 presentTelemetryMigrationSheetIfNeeded()

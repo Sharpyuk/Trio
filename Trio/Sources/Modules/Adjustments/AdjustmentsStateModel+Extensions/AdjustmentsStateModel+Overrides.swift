@@ -469,7 +469,7 @@ extension Adjustments.StateModel {
                 postExerciseEnabled: postExerciseEnabled,
                 postExerciseBasalPercentage: postExerciseBasalPercentage,
                 postExerciseTargetEnabled: postExerciseTargetEnabled,
-                postExerciseTarget: postExerciseTarget,
+                postExerciseTarget: postExerciseTargetEnabled ? postExerciseTarget : 0,
                 postExerciseSuppressSMB: postExerciseSuppressSMB,
                 announcementSettings: ExerciseAnnouncementSettings(
                     enabled: announceGlucoseDuringExercise,
@@ -970,7 +970,7 @@ extension Adjustments.StateModel {
             let metadata = ExerciseSessionMetadataStore.load(sessionID: sessionID)
             let shouldCreateRecovery = metadata?.postExerciseEnabled ?? postExerciseEnabled
             let recoveryBasalPercentage = metadata?.postExerciseBasalPercentage ?? postExerciseBasalPercentage
-            let recoveryTargetEnabled = metadata?.postExerciseTargetEnabled ?? postExerciseTargetEnabled
+            let recoveryTargetEnabled = (metadata?.postExerciseTargetEnabled ?? postExerciseTargetEnabled) == true
             let recoveryTarget = recoveryTargetEnabled ? (metadata?.postExerciseTarget ?? postExerciseTarget) : 0
             let recoverySuppressSMB = metadata?.postExerciseSuppressSMB ?? postExerciseSuppressSMB
 
@@ -1077,7 +1077,7 @@ extension Adjustments.StateModel {
         )
         let shouldCreateRecovery = metadata?.postExerciseEnabled ?? postExerciseEnabled
         let recoveryBasalPercentage = metadata?.postExerciseBasalPercentage ?? postExerciseBasalPercentage
-        let recoveryTargetEnabled = metadata?.postExerciseTargetEnabled ?? postExerciseTargetEnabled
+        let recoveryTargetEnabled = (metadata?.postExerciseTargetEnabled ?? postExerciseTargetEnabled) == true
         let recoveryTarget = recoveryTargetEnabled ? (metadata?.postExerciseTarget ?? postExerciseTarget) : 0
         let recoverySuppressSMB = metadata?.postExerciseSuppressSMB ?? postExerciseSuppressSMB
         let announcementSettings = metadata?.announcementSettings ?? ExerciseAnnouncementSettings(
