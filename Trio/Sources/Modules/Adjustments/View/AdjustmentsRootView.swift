@@ -27,6 +27,12 @@ extension Adjustments {
         @State var showCancelTempTargetConfirmDialog = false
         @State var pendingPresetActivation: PendingPresetActivation?
 
+        @FetchRequest(fetchRequest: OverrideStored.fetch(
+            NSPredicate.lastActiveOverride,
+            ascending: false,
+            fetchLimit: 0
+        )) var activeOverrides: FetchedResults<OverrideStored>
+
         private var shouldDisplayStickyOverrideStopButton: Bool {
             state.isOverrideEnabled &&
                 state.activeOverrideName.isNotEmpty &&
@@ -35,6 +41,14 @@ extension Adjustments {
 
         private var shouldDisplayStickyTempTargetStopButton: Bool {
             state.isTempTargetEnabled && state.activeTempTargetName.isNotEmpty
+        }
+
+        private var activeProteinFatAssistOverrides: [OverrideStored] {
+            activeOverrides.filter { override in
+                override.isActive() &&
+                    override.currentProteinFatAssist &&
+                    override.objectID != state.currentActiveOverride?.objectID
+            }
         }
 
         @Environment(\.colorScheme) var colorScheme
@@ -342,8 +356,51 @@ extension Adjustments {
             }
         }
 
+        @ViewBuilder var activeProteinFatAssistAdjustments: some View {
+            if !activeProteinFatAssistOverrides.isEmpty {
+                Section {
+                    ForEach(activeProteinFatAssistOverrides) { override in
+                        activeProteinFatAssistRow(for: override)
+                    }
+                } header: {
+                    Text("Protein/Fat Assist")
+                }
+                .listRowBackground(Color.gray.opacity(0.18))
+            }
+        }
+
+        @ViewBuilder private func activeProteinFatAssistRow(for override: OverrideStored) -> some View {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(override.name ?? "Protein/Fat Assist") is running")
+
+                    if let activeUntil = override.activeUntilDate() {
+                        Text("\(formattedTimeRemaining(activeUntil.timeIntervalSinceNow)) remaining")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if let details = proteinFatAssistDetails(for: override) {
+                        Text(details)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Spacer()
+
+                Button("Cancel") {
+                    Task {
+                        await state.cancelOverride(withID: override.objectID)
+                    }
+                }
+                .buttonStyle(.bordered)
+                .tint(.red)
+            }
+        }
+
         private func proteinFatAssistDetails(for override: OverrideStored) -> String? {
-            guard (override.name ?? "").hasPrefix("Protein/Fat Assist") else { return nil }
+            guard override.currentProteinFatAssist else { return nil }
 
             var details: [String] = []
             if let target = override.target?.decimalValue, target > 0 {

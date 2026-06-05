@@ -52,7 +52,7 @@ struct OverrideView: ChartContent {
                     start: start,
                     end: overrideEndDate(override: override, start: start),
                     target: getOverrideTarget(override: override),
-                    color: .purple
+                    color: overrideColor(override)
                 ))
             }
         }
@@ -156,7 +156,7 @@ struct OverrideView: ChartContent {
                 xEnd: .value("End", end, unit: .second),
                 y: .value("Value", units == .mgdL ? target : target.asMmolL)
             )
-            .foregroundStyle(Color.purple.opacity(0.25))
+            .foregroundStyle(overrideRunColor(overrideRunStored).opacity(0.25))
             .lineStyle(.init(lineWidth: 8))
         }
     }
@@ -244,5 +244,13 @@ struct OverrideView: ChartContent {
              nil:
             return .purple
         }
+    }
+
+    private func overrideColor(_ override: OverrideStored) -> Color {
+        override.currentProteinFatAssist ? .gray : .purple
+    }
+
+    private func overrideRunColor(_ overrideRun: OverrideRunStored) -> Color {
+        (overrideRun.name ?? "").hasPrefix("Protein/Fat Assist") ? .gray : .purple
     }
 }

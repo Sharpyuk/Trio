@@ -310,6 +310,37 @@ extension Adjustments.StateModel {
         }
     }
 
+    @MainActor func cancelOverride(withID objectID: NSManagedObjectID, createOverrideRunEntry: Bool = true) async {
+        do {
+            guard let overrideToCancel = try viewContext.existingObject(with: objectID) as? OverrideStored else { return }
+
+            if createOverrideRunEntry {
+                let newOverrideRunStored = OverrideRunStored(context: viewContext)
+                newOverrideRunStored.id = UUID(uuidString: overrideToCancel.id ?? "") ?? UUID()
+                newOverrideRunStored.name = overrideToCancel.name
+                newOverrideRunStored.startDate = overrideToCancel.date ?? .distantPast
+                newOverrideRunStored.endDate = Date()
+                newOverrideRunStored.target = NSDecimalNumber(
+                    decimal: overrideStorage.calculateTarget(override: overrideToCancel)
+                )
+                newOverrideRunStored.override = overrideToCancel
+                newOverrideRunStored.isUploadedToNS = false
+            }
+
+            overrideToCancel.enabled = false
+
+            if viewContext.hasChanges {
+                try viewContext.save()
+                updateLatestOverrideConfiguration()
+            }
+        } catch {
+            debug(
+                .default,
+                "\(DebuggingIdentifiers.failed) Failed to cancel override: \(error)"
+            )
+        }
+    }
+
     // MARK: - Save Overrides
 
     /// Saves a custom Override and activates it.

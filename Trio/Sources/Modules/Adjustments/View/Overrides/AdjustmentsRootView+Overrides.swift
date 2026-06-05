@@ -12,6 +12,7 @@ extension Adjustments.RootView {
         if state.scheduledExerciseOverrides.isNotEmpty {
             scheduledExerciseModes
         }
+        activeProteinFatAssistAdjustments
         if state.exerciseActivityPresets.isNotEmpty {
             exerciseOverridePresets
         }

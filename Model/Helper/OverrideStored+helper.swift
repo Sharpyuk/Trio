@@ -26,6 +26,10 @@ extension OverrideStored {
         name == Self.exerciseModeName || exercisePhase != nil
     }
 
+    var currentProteinFatAssist: Bool {
+        (name ?? "").hasPrefix("Protein/Fat Assist")
+    }
+
     var exercisePhase: ExercisePhase? {
         guard let name else { return nil }
 
