@@ -31427,9 +31427,6 @@
         }
       }
     },
-    "Add Mock Garmin Watch" : {
-
-    },
     "Add Omnipod" : {
       "comment" : "Add Omnipod pump",
       "extractionState" : "manual",
@@ -80522,6 +80519,16 @@
         }
       }
     },
+    "Current: %@\nNew: %@\nChoose how Trio should handle Protein/Fat Assist. The meal will only be logged if you continue." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Current: %1$@\nNew: %2$@\nChoose how Trio should handle Protein/Fat Assist. The meal will only be logged if you continue."
+          }
+        }
+      }
+    },
     "CurrentBG" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -115846,6 +115853,9 @@
     "Exercise" : {
 
     },
+    "Exercise active: basal/target safety is controlled by Exercise; Protein/Fat ISF/SMB/UAM may be suppressed until Exercise/recovery ends." : {
+
+    },
     "Exercise announcements" : {
 
     },
@@ -117409,6 +117419,9 @@
           }
         }
       }
+    },
+    "Extend Current Assist" : {
+
     },
     "Extended" : {
       "comment" : "Title string for BeepPreference.extended",
@@ -150862,6 +150875,9 @@
           }
         }
       }
+    },
+    "Keep Current and Log Meal" : {
+
     },
     "Keep Override" : {
 
@@ -202014,6 +202030,9 @@
     "Protein/Fat Assist" : {
 
     },
+    "Protein/Fat Assist already active" : {
+
+    },
     "Protein/Fat Strategy" : {
 
     },
@@ -209571,9 +209590,6 @@
         }
       }
     },
-    "Remove All Devices" : {
-
-    },
     "Remove Last" : {
       "localizations" : {
         "bg" : {
@@ -209821,6 +209837,9 @@
           }
         }
       }
+    },
+    "Replace Assist" : {
+
     },
     "Replace pod" : {
       "comment" : "View/Header when pod expired",
@@ -227300,12 +227319,6 @@
           }
         }
       }
-    },
-    "Simulator only - for testing UI workflow" : {
-
-    },
-    "Simulator Testing" : {
-
     },
     "Skip Bolus screen after carbs" : {
       "comment" : "Do you want to show bolus screen after added carbs?",

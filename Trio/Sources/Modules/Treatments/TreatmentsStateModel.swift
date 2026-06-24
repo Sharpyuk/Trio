@@ -109,6 +109,7 @@ extension Treatments {
         var proteinFatAssistMinimumDuration: Decimal = 120
         var proteinFatAssistMaximumDefaultDuration: Decimal = 480
         var proteinFatAssistDurationManuallyEdited: Bool = false
+        var pendingProteinFatAssistConflict: PendingProteinFatAssistConflict?
         var dish: String = ""
         var selection: MealPresetStored?
         var summation: [String] = []
@@ -153,6 +154,24 @@ extension Treatments {
         private var subscriptions = Set<AnyCancellable>()
 
         typealias PumpEvent = PumpEventStored.EventType
+
+        enum ProteinFatAssistConflictResolution {
+            case keepCurrent
+            case extendCurrent
+            case replaceCurrent
+        }
+
+        struct PendingProteinFatAssistConflict {
+            let currentName: String
+            let proposedName: String
+            let currentEnd: Date?
+            let proposedEnd: Date
+
+            var canExtend: Bool {
+                guard let currentEnd else { return true }
+                return proposedEnd > currentEnd
+            }
+        }
 
         var bolusProgress: Decimal?
         var isBolusInProgress: Bool { bolusProgress != nil }
@@ -482,9 +501,13 @@ extension Treatments {
 
         // MARK: - Button tasks
 
-        func invokeTreatmentsTask() {
+        func invokeTreatmentsTask(proteinFatAssistResolution: ProteinFatAssistConflictResolution? = nil) {
             Task {
                 debug(.bolusState, "invokeTreatmentsTask fired")
+                guard await prepareProteinFatAssistSubmission(resolution: proteinFatAssistResolution) else {
+                    return
+                }
+
                 await MainActor.run {
                     self.beginTreatmentSubmission()
                 }
@@ -499,7 +522,7 @@ extension Treatments {
                 }
 
                 if treatmentInput.isCarbsPresent || treatmentInput.isFatPresent || treatmentInput.isProteinPresent {
-                    await saveMeal()
+                    await saveMeal(proteinFatAssistResolution: proteinFatAssistResolution)
                 }
 
                 if treatmentInput.isInsulinGiven {
@@ -695,7 +718,7 @@ extension Treatments {
 
         // MARK: - Carbs
 
-        func saveMeal() async {
+        func saveMeal(proteinFatAssistResolution: ProteinFatAssistConflictResolution? = nil) async {
             do {
                 let meal = await MainActor.run {
                     self.carbs = min(self.carbs, self.maxCarbs)
@@ -754,7 +777,8 @@ extension Treatments {
                     try await storeProteinFatAssistOverride(
                         duration: meal.proteinFatAssistDuration,
                         aggressiveness: meal.proteinFatAssistAggressiveness,
-                        profile: meal.proteinFatAssistProfile
+                        profile: meal.proteinFatAssistProfile,
+                        resolution: proteinFatAssistResolution
                     )
                 }
 
@@ -800,11 +824,97 @@ extension Treatments {
         private func storeProteinFatAssistOverride(
             duration: Decimal,
             aggressiveness: ProteinFatAssistAggressiveness,
-            profile: ProteinFatAssistProfileSettings
+            profile: ProteinFatAssistProfileSettings,
+            resolution: ProteinFatAssistConflictResolution? = nil
         ) async throws {
             await disableActiveNormalOverridesForProteinFatAssist()
 
             let profile = profile.sanitized
+            let override = proteinFatAssistOverride(duration: duration, aggressiveness: aggressiveness, profile: profile)
+
+            let activeAssists = await activeProteinFatAssistOverrides()
+            for duplicateAssist in activeAssists.dropFirst() {
+                await cancelProteinFatAssist(duplicateAssist)
+            }
+
+            if let activeAssist = activeAssists.first {
+                let selectedResolution = resolution ??
+                    (proteinFatAssist(activeAssist, matches: override) ? .extendCurrent : .keepCurrent)
+
+                switch selectedResolution {
+                case .keepCurrent:
+                    debug(
+                        .default,
+                        "Protein/Fat Assist already active; logged meal only and kept current Assist \(activeAssist.name ?? "Unknown")"
+                    )
+                    return
+
+                case .extendCurrent:
+                    await extendProteinFatAssist(activeAssist, proposedDuration: override.duration)
+                    return
+
+                case .replaceCurrent:
+                    await cancelProteinFatAssist(activeAssist)
+                }
+            }
+
+            try await overrideStorage.storeOverride(override: override)
+            debug(
+                .default,
+                "Protein/Fat Assist started: duration=\(duration)m profile=\(aggressiveness.rawValue) targetEnabled=\(profile.targetAdjustmentEnabled) target=\(override.target) isf=\(profile.isfPercent)% smb=\(override.smbMinutes)m uam=\(override.uamMinutes)m"
+            )
+        }
+
+        @MainActor private func prepareProteinFatAssistSubmission(resolution: ProteinFatAssistConflictResolution?) async -> Bool {
+            let input = (
+                hasProteinOrFat: fat > 0 || protein > 0,
+                strategy: proteinFatMealStrategy,
+                duration: min(max(proteinFatAssistDuration, 60), 720),
+                aggressiveness: proteinFatAssistAggressiveness,
+                profile: effectiveProteinFatAssistProfile.sanitized
+            )
+
+            guard input.hasProteinOrFat, input.strategy == .assist else {
+                pendingProteinFatAssistConflict = nil
+                return true
+            }
+
+            guard let activeAssist = await activeProteinFatAssistOverrides().first else {
+                pendingProteinFatAssistConflict = nil
+                return true
+            }
+
+            let proposed = proteinFatAssistOverride(
+                duration: input.duration,
+                aggressiveness: input.aggressiveness,
+                profile: input.profile
+            )
+
+            if proteinFatAssist(activeAssist, matches: proposed) {
+                pendingProteinFatAssistConflict = nil
+                return true
+            }
+
+            guard resolution == nil else {
+                pendingProteinFatAssistConflict = nil
+                return true
+            }
+
+            pendingProteinFatAssistConflict = PendingProteinFatAssistConflict(
+                currentName: activeAssist.name ?? String(localized: "Protein/Fat Assist"),
+                proposedName: proposed.name,
+                currentEnd: activeAssist.activeUntilDate(),
+                proposedEnd: proposed.date
+                    .addingTimeInterval(TimeInterval(NSDecimalNumber(decimal: proposed.duration).doubleValue * 60))
+            )
+            return false
+        }
+
+        private func proteinFatAssistOverride(
+            duration: Decimal,
+            aggressiveness: ProteinFatAssistAggressiveness,
+            profile: ProteinFatAssistProfileSettings
+        ) -> Override {
             let targetBase = currentBGTarget > 0 ? currentBGTarget : 100
             let target = profile.targetAdjustmentEnabled ? max(72, min(270, targetBase - profile.targetAdjustmentMgDL)) : 0
             let defaultSmbMinutes = settingsManager.preferences.maxSMBBasalMinutes
@@ -812,7 +922,8 @@ extension Treatments {
             let smbMinutes = min(180, defaultSmbMinutes + profile.smbMinutesIncrease)
             let uamMinutes = min(180, defaultUamMinutes + profile.uamMinutesIncrease)
             let usesAdvancedSettings = smbMinutes != defaultSmbMinutes || uamMinutes != defaultUamMinutes
-            let override = Override(
+
+            return Override(
                 name: "Protein/Fat Assist: \(aggressiveness.displayName)",
                 enabled: true,
                 date: Date(),
@@ -834,12 +945,87 @@ extension Treatments {
                 smbMinutes: smbMinutes,
                 uamMinutes: uamMinutes
             )
+        }
 
-            try await overrideStorage.storeOverride(override: override)
-            debug(
-                .default,
-                "Protein/Fat Assist started: duration=\(duration)m profile=\(aggressiveness.rawValue) targetEnabled=\(profile.targetAdjustmentEnabled) target=\(target) isf=\(profile.isfPercent)% smb=\(smbMinutes)m uam=\(uamMinutes)m"
-            )
+        private func proteinFatAssist(_ activeAssist: OverrideStored, matches proposed: Override) -> Bool {
+            let activeTarget = activeAssist.target?.decimalValue ?? 0
+            let activeSmbMinutes = activeAssist.smbMinutes?.decimalValue ?? 0
+            let activeUamMinutes = activeAssist.uamMinutes?.decimalValue ?? 0
+
+            return (activeAssist.name ?? "") == proposed.name &&
+                Decimal(activeAssist.percentage) == Decimal(proposed.percentage) &&
+                activeAssist.isf == proposed.isf &&
+                activeAssist.advancedSettings == proposed.advancedSettings &&
+                activeTarget == proposed.target &&
+                activeSmbMinutes == proposed.smbMinutes &&
+                activeUamMinutes == proposed.uamMinutes
+        }
+
+        @MainActor private func activeProteinFatAssistOverrides() async -> [OverrideStored] {
+            do {
+                let ids = try await overrideStorage.loadLatestOverrideConfigurations(fetchLimit: 0)
+                let activeOverrides = try ids.compactMap { id in
+                    try viewContext.existingObject(with: id) as? OverrideStored
+                }
+                return activeOverrides.filter { $0.currentProteinFatAssist && $0.isActive() }
+            } catch {
+                debug(
+                    .default,
+                    "\(DebuggingIdentifiers.failed) Failed to fetch active Protein/Fat Assist overrides: \(error)"
+                )
+                return []
+            }
+        }
+
+        @MainActor private func extendProteinFatAssist(_ activeAssist: OverrideStored, proposedDuration: Decimal) async {
+            guard let activeStart = activeAssist.date else { return }
+
+            let now = Date()
+            let proposedEnd = now.addingTimeInterval(TimeInterval(NSDecimalNumber(decimal: proposedDuration).doubleValue * 60))
+            let currentEnd = activeAssist.activeUntilDate() ?? activeStart
+            guard proposedEnd > currentEnd else {
+                debug(.default, "Protein/Fat Assist extension skipped because current Assist already lasts longer")
+                return
+            }
+
+            activeAssist.duration = NSDecimalNumber(value: proposedEnd.timeIntervalSince(activeStart) / 60)
+            activeAssist.isUploadedToNS = false
+
+            do {
+                if viewContext.hasChanges {
+                    try viewContext.save()
+                    Foundation.NotificationCenter.default.post(name: .didUpdateOverrideConfiguration, object: nil)
+                }
+                debug(.default, "Protein/Fat Assist extended until \(proposedEnd)")
+            } catch {
+                debug(.default, "\(DebuggingIdentifiers.failed) Failed to extend Protein/Fat Assist: \(error)")
+            }
+        }
+
+        @MainActor private func cancelProteinFatAssist(_ activeAssist: OverrideStored) async {
+            do {
+                let newOverrideRunStored = OverrideRunStored(context: viewContext)
+                newOverrideRunStored.id = UUID(uuidString: activeAssist.id ?? "") ?? UUID()
+                newOverrideRunStored.name = activeAssist.name
+                newOverrideRunStored.startDate = activeAssist.date ?? .distantPast
+                newOverrideRunStored.endDate = Date()
+                newOverrideRunStored.target = NSDecimalNumber(
+                    decimal: overrideStorage.calculateTarget(override: activeAssist)
+                )
+                newOverrideRunStored.override = activeAssist
+                newOverrideRunStored.isUploadedToNS = false
+
+                activeAssist.enabled = false
+                activeAssist.isUploadedToNS = false
+
+                if viewContext.hasChanges {
+                    try viewContext.save()
+                    Foundation.NotificationCenter.default.post(name: .didUpdateOverrideConfiguration, object: nil)
+                }
+                debug(.default, "Protein/Fat Assist replaced: cancelled \(activeAssist.name ?? "Unknown")")
+            } catch {
+                debug(.default, "\(DebuggingIdentifiers.failed) Failed to cancel Protein/Fat Assist: \(error)")
+            }
         }
 
         @MainActor private func disableActiveNormalOverridesForProteinFatAssist() async {

@@ -44,11 +44,17 @@ extension Adjustments {
         }
 
         private var activeProteinFatAssistOverrides: [OverrideStored] {
-            activeOverrides.filter { override in
+            let assists = activeOverrides.filter { override in
                 override.isActive() &&
                     override.currentProteinFatAssist &&
                     override.objectID != state.currentActiveOverride?.objectID
             }
+            return Array(assists.prefix(1))
+        }
+
+        private var hasActiveExerciseOverride: Bool {
+            activeOverrides.contains { $0.isActive() && $0.isExerciseMode } ||
+                state.scheduledExerciseOverrides.contains { $0.isActive() && $0.isExerciseMode }
         }
 
         @Environment(\.colorScheme) var colorScheme
@@ -305,6 +311,15 @@ extension Adjustments {
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
+
+                                if let activeOverride = state.currentActiveOverride,
+                                   activeOverride.currentProteinFatAssist,
+                                   hasActiveExerciseOverride
+                                {
+                                    Text(proteinFatExerciseMergeSummary)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
 
                             Spacer()
@@ -385,6 +400,12 @@ extension Adjustments {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+
+                    if hasActiveExerciseOverride {
+                        Text(proteinFatExerciseMergeSummary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 Spacer()
@@ -425,6 +446,12 @@ extension Adjustments {
             }
 
             return details.isEmpty ? nil : details.joined(separator: ", ")
+        }
+
+        private var proteinFatExerciseMergeSummary: String {
+            String(
+                localized: "Exercise active: basal/target safety is controlled by Exercise; Protein/Fat ISF/SMB/UAM may be suppressed until Exercise/recovery ends."
+            )
         }
 
         var cancelAdjustmentButton: some View {

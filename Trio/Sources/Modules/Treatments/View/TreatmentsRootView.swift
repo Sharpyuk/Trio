@@ -549,6 +549,35 @@ extension Treatments {
                             state.invokeTreatmentsTask()
                         }
                     }
+                    .confirmationDialog(
+                        "Protein/Fat Assist already active",
+                        isPresented: proteinFatAssistConflictBinding,
+                        titleVisibility: .visible
+                    ) {
+                        Button("Keep Current and Log Meal") {
+                            state.invokeTreatmentsTask(proteinFatAssistResolution: .keepCurrent)
+                        }
+
+                        if state.pendingProteinFatAssistConflict?.canExtend == true {
+                            Button("Extend Current Assist") {
+                                state.invokeTreatmentsTask(proteinFatAssistResolution: .extendCurrent)
+                            }
+                        }
+
+                        Button("Replace Assist", role: .destructive) {
+                            state.invokeTreatmentsTask(proteinFatAssistResolution: .replaceCurrent)
+                        }
+
+                        Button("Cancel", role: .cancel) {
+                            state.pendingProteinFatAssistConflict = nil
+                        }
+                    } message: {
+                        if let conflict = state.pendingProteinFatAssistConflict {
+                            Text(
+                                "Current: \(conflict.currentName)\nNew: \(conflict.proposedName)\nChoose how Trio should handle Protein/Fat Assist. The meal will only be logged if you continue."
+                            )
+                        }
+                    }
                 }
             } header: {
                 if !bolusWarning.warningMessage.isEmpty {
@@ -560,6 +589,17 @@ extension Treatments {
                         .padding(.top, -22)
                 }
             }
+        }
+
+        private var proteinFatAssistConflictBinding: Binding<Bool> {
+            Binding(
+                get: { state.pendingProteinFatAssistConflict != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        state.pendingProteinFatAssistConflict = nil
+                    }
+                }
+            )
         }
 
         @ViewBuilder private func proteinFatStrategy() -> some View {
