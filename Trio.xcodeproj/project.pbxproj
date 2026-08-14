@@ -27,6 +27,7 @@
 		190EBCCB29FF13CB00BA767D /* UserInterfaceSettingsRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 190EBCCA29FF13CB00BA767D /* UserInterfaceSettingsRootView.swift */; };
 		191F62682AD6B05A004D7911 /* NightscoutSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 191F62672AD6B05A004D7911 /* NightscoutSettings.swift */; };
 		1935364028496F7D001E0B16 /* TrioCustomOrefVariables.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1935363F28496F7D001E0B16 /* TrioCustomOrefVariables.swift */; };
+		EAC100012F60000100000001 /* ExerciseMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAC100022F60000100000001 /* ExerciseMode.swift */; };
 		193F6CDD2A512C8F001240FD /* Loops.swift in Sources */ = {isa = PBXBuildFile; fileRef = 193F6CDC2A512C8F001240FD /* Loops.swift */; };
 		195D80B42AF6973A00D25097 /* DynamicSettingsRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 195D80B32AF6973A00D25097 /* DynamicSettingsRootView.swift */; };
 		195D80B72AF697B800D25097 /* DynamicSettingsDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 195D80B62AF697B800D25097 /* DynamicSettingsDataFlow.swift */; };
@@ -1072,6 +1073,7 @@
 		190EBCCA29FF13CB00BA767D /* UserInterfaceSettingsRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserInterfaceSettingsRootView.swift; sourceTree = "<group>"; };
 		191F62672AD6B05A004D7911 /* NightscoutSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NightscoutSettings.swift; sourceTree = "<group>"; };
 		1935363F28496F7D001E0B16 /* TrioCustomOrefVariables.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrioCustomOrefVariables.swift; sourceTree = "<group>"; };
+		EAC100022F60000100000001 /* ExerciseMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseMode.swift; sourceTree = "<group>"; };
 		193F6CDC2A512C8F001240FD /* Loops.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Loops.swift; sourceTree = "<group>"; };
 		195D80B32AF6973A00D25097 /* DynamicSettingsRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynamicSettingsRootView.swift; sourceTree = "<group>"; };
 		195D80B62AF697B800D25097 /* DynamicSettingsDataFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynamicSettingsDataFlow.swift; sourceTree = "<group>"; };
@@ -2827,6 +2829,7 @@
 				49090A8C2E9FE8D200D0F5DB /* GarminWatchSettings.swift */,
 				DD4FFF322D458EE600B6CFF9 /* GarminWatchState.swift */,
 				DD940BA92CA7585D000830A5 /* GlucoseColorScheme.swift */,
+				EAC100022F60000100000001 /* ExerciseMode.swift */,
 				BD1179AD2F4E22C100F90001 /* GlucoseSourceKey.swift */,
 				E0D4F80427513ECF00BDF1FE /* HealthKitSample.swift */,
 				1967DFBD29D052C200759F30 /* Icons.swift */,
@@ -5395,6 +5398,7 @@
 				38DF179027733EAD00B3528F /* SnowScene.swift in Sources */,
 				DD1DB7CC2BECCA1F0048B367 /* BuildDetails.swift in Sources */,
 				1935364028496F7D001E0B16 /* TrioCustomOrefVariables.swift in Sources */,
+				EAC100012F60000100000001 /* ExerciseMode.swift in Sources */,
 				CE2FAD3A297D93F0001A872C /* BloodGlucoseExtensions.swift in Sources */,
 				38E4453A274E411700EC9A94 /* Disk+[UIImage].swift in Sources */,
 				DD73FA0F2D74F58E00D19D1E /* BackgroundTask+Helper.swift in Sources */,

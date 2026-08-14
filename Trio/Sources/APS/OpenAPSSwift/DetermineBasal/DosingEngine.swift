@@ -23,6 +23,9 @@ enum DosingEngine {
         trioCustomOrefVariables: TrioCustomOrefVariables,
         clock: Date
     ) throws -> Bool {
+        if trioCustomOrefVariables.exerciseAdjustment?.smbEnabled == false {
+            return false
+        }
         if trioCustomOrefVariables.smbIsOff {
             return false
         }
@@ -687,6 +690,36 @@ enum DosingEngine {
         return (insulinRequired, newDetermination)
     }
 
+    /// Applies Exercise strength only to positive additional correction insulin.
+    /// Negative requirements are low-glucose protection and are preserved exactly.
+    static func applyExerciseCorrectionScale(
+        to insulinRequired: Decimal,
+        adjustment: EffectiveExerciseAdjustment?,
+        determination: Determination
+    ) -> (insulinRequired: Decimal, determination: Determination) {
+        guard insulinRequired > 0, let adjustment else { return (insulinRequired, determination) }
+        let scale = max(0, min(1, adjustment.correctionScale))
+        let effective = exerciseScaledInsulinRequired(insulinRequired, scale: scale)
+        var updated = determination
+        updated.insulinReq = effective
+        updated.reason +=
+            " Exercise correction: normal (insulinRequired)U × (scale) = (effective)U [(adjustment.source)]."
+        return (effective, updated)
+    }
+
+    /// Pure correction-scaling seam used by both deterministic tests and the dosing path.
+    /// Non-positive requirements are intentionally returned byte-for-byte unchanged.
+    static func exerciseScaledInsulinRequired(_ insulinRequired: Decimal, scale: Decimal) -> Decimal {
+        guard insulinRequired > 0 else { return insulinRequired }
+        return (insulinRequired * max(0, min(1, scale))).jsRounded(scale: 3)
+    }
+
+    /// The unrounded high-temp request. Keeping this calculation explicit makes it
+    /// testable that high temp receives the same Exercise-scaled correction as SMB.
+    static func requestedHighTempBasalRate(basal: Decimal, insulinRequired: Decimal) -> Decimal {
+        basal + (2 * insulinRequired)
+    }
+
     /// Determines the maxBolus possible for a Super Micro Bolus (SMB)
     static func determineMaxBolus(
         currentBasal: Decimal,
@@ -859,7 +892,7 @@ enum DosingEngine {
         determination: Determination
     ) throws -> Determination {
         var newDetermination = determination
-        var rate = basal + (2 * insulinRequired)
+        var rate = requestedHighTempBasalRate(basal: basal, insulinRequired: insulinRequired)
         rate = TempBasalFunctions.roundBasal(profile: profile, basalRate: rate)
 
         let maxSafeBasal = try TempBasalFunctions.getMaxSafeBasalRate(profile: profile)

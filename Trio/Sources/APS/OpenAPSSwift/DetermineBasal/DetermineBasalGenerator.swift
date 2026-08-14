@@ -169,6 +169,12 @@ enum DeterminationGenerator {
                 overrideFactor: trioCustomOrefVariables.overrideFactor()
             )
         }
+        if let exerciseAdjustment = trioCustomOrefVariables.exerciseAdjustment {
+            basal = TempBasalFunctions.roundBasal(
+                profile: profile,
+                basalRate: basal * exerciseAdjustment.basalScale
+            )
+        }
 
         // this is the `sens` variable in JS, it's the adjusted sensitivity
         let adjustedSensitivity = computeAdjustedSensitivity(
@@ -506,7 +512,7 @@ enum DeterminationGenerator {
         // MARK: - Aggressive dosing logic (SMB, High Temps)
 
         // Calculate Insulin Required
-        let (insulinRequired, insulinReqDetermination) = DosingEngine.calculateInsulinRequired(
+        let (normalInsulinRequired, insulinReqDetermination) = DosingEngine.calculateInsulinRequired(
             minForecastGlucose: forecastResult.minForecastedGlucose,
             eventualGlucose: forecastResult.eventualGlucose,
             targetGlucose: adjustedGlucoseTargets.targetGlucose,
@@ -516,6 +522,15 @@ enum DeterminationGenerator {
             determination: determination
         )
         determination = insulinReqDetermination
+
+        // This is the single shared handoff to both SMB and high-temp delivery. Scaling here
+        // prevents a disabled/reduced SMB from being replaced by the original high temp.
+        let (insulinRequired, exerciseScaledDetermination) = DosingEngine.applyExerciseCorrectionScale(
+            to: normalInsulinRequired,
+            adjustment: trioCustomOrefVariables.exerciseAdjustment,
+            determination: determination
+        )
+        determination = exerciseScaledDetermination
 
         // SMB Delivery
         let (shouldSetTempBasalForSMB, smbDetermination) = try DosingEngine.determineSMBDelivery(

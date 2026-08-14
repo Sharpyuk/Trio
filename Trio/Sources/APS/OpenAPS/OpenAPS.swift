@@ -388,6 +388,19 @@ final class OpenAPS {
             let disableSMBs = activeOverrides.first?.smbIsOff ?? false
             let overrideTargetBG = activeOverrides.first?.target?.decimalValue ?? 0
 
+            let exerciseNow = Date()
+            var exerciseState = self.storage.retrieve("exercise/state.json", as: ExercisePersistedState.self) ?? .initial
+            if var session = exerciseState.activeSession {
+                ExerciseReconciler.reconcile(&session, at: exerciseNow)
+                exerciseState.activeSession = session
+                self.storage.save(exerciseState, as: "exercise/state.json")
+            }
+            // A normal Override remains exclusive and suppresses Exercise at the algorithm boundary.
+            let exerciseAdjustment = isOverrideActive ? nil : EffectiveExerciseAdjustment.resolve(
+                session: exerciseState.activeSession,
+                at: exerciseNow
+            )
+
             // Calculate averages for Total Daily Dose (TDD)
             let totalTDD = historicalTDDData.compactMap { ($0["total"] as? NSDecimalNumber)?.decimalValue }.reduce(0, +)
             let totalDaysCount = max(historicalTDDData.count, 1)
@@ -426,7 +439,8 @@ final class OpenAPS {
                 start: (activeOverrides.first?.start ?? 0) as Decimal,
                 end: (activeOverrides.first?.end ?? 0) as Decimal,
                 smbMinutes: activeOverrides.first?.smbMinutes?.decimalValue ?? maxSMBBasalMinutes,
-                uamMinutes: activeOverrides.first?.uamMinutes?.decimalValue ?? maxUAMBasalMinutes
+                uamMinutes: activeOverrides.first?.uamMinutes?.decimalValue ?? maxUAMBasalMinutes,
+                exerciseAdjustment: exerciseAdjustment
             )
 
             // Save and return contents of Trio's custom oref variables

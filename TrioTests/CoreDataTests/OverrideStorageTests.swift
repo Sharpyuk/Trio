@@ -223,3 +223,81 @@ import Testing
         #expect(notUploadedOverrides[0].eventType == .nsExercise, "Event type should be exercise")
     }
 }
+
+@Suite("Exercise Mode Domain Tests") struct ExerciseModeDomainTests {
+    private func session(start: Date, created: Date? = nil) -> ExerciseSession {
+        ExerciseSession(
+            id: UUID(),
+            preset: ExercisePreset.defaults[0],
+            createdAt: created ?? start.addingTimeInterval(-3600),
+            scheduledExerciseStart: start
+        )
+    }
+
+    @Test("Missed scheduled transitions reconcile directly to Active") func missedTransition() {
+        let start = Date(timeIntervalSince1970: 1_000_000)
+        var value = session(start: start)
+        ExerciseReconciler.reconcile(&value, at: start.addingTimeInterval(15 * 60))
+        #expect(value.actualPreExerciseStart != nil)
+        #expect(value.actualExerciseStart == start)
+        #expect(value.phase(at: start.addingTimeInterval(15 * 60)) == .active)
+    }
+
+    @Test("Reconciliation does not duplicate timestamps") func idempotentReconciliation() {
+        let start = Date(timeIntervalSince1970: 1_000_000)
+        var value = session(start: start)
+        ExerciseReconciler.reconcile(&value, at: start.addingTimeInterval(60))
+        let pre = value.actualPreExerciseStart
+        let active = value.actualExerciseStart
+        ExerciseReconciler.reconcile(&value, at: start.addingTimeInterval(600))
+        #expect(value.actualPreExerciseStart == pre)
+        #expect(value.actualExerciseStart == active)
+    }
+
+    @Test("Optional target stays absent") func optionalTarget() {
+        let start = Date()
+        var value = session(start: start)
+        ExerciseReconciler.startExerciseNow(&value, at: start)
+        #expect(EffectiveExerciseAdjustment.resolve(session: value, at: start)?.target == nil)
+    }
+
+    @Test("Short exercise has no recovery") func shortExercise() {
+        let start = Date(timeIntervalSince1970: 1_000_000)
+        var value = session(start: start)
+        ExerciseReconciler.startExerciseNow(&value, at: start)
+        ExerciseReconciler.stopExercise(&value, at: start.addingTimeInterval(9 * 60))
+        #expect(value.recoveryStart == nil)
+        #expect(value.completedAt != nil)
+    }
+
+    @Test("Long recovery is capped at 24 hours") func recoveryCap() {
+        #expect(ExerciseRecoveryCalculator.recommendation(forExerciseDuration: 20 * 3600) == 24 * 3600)
+    }
+}
+
+@Suite("Exercise correction scaling tests") struct ExerciseCorrectionScalingTests {
+    @Test("Positive correction scales deterministically", arguments: [
+        (Decimal(1), Decimal(1)),
+        (Decimal(string: "0.5")!, Decimal(string: "0.5")!),
+        (Decimal(string: "0.25")!, Decimal(string: "0.25")!),
+        (Decimal(0), Decimal(0))
+    ])
+    func positiveCorrection(scale: Decimal, expected: Decimal) {
+        #expect(DosingEngine.exerciseScaledInsulinRequired(1, scale: scale) == expected)
+    }
+
+    @Test("Negative correction is preserved exactly", arguments: [
+        Decimal(1), Decimal(string: "0.5")!, Decimal(string: "0.25")!, Decimal(0)
+    ])
+    func negativeCorrection(scale: Decimal) {
+        let requirement = Decimal(string: "-0.375")!
+        #expect(DosingEngine.exerciseScaledInsulinRequired(requirement, scale: scale) == requirement)
+    }
+
+    @Test("High temp uses the scaled correction requirement") func highTempUsesScaledRequirement() {
+        let scaled = DosingEngine.exerciseScaledInsulinRequired(1, scale: Decimal(string: "0.25")!)
+        #expect(scaled == Decimal(string: "0.25")!)
+        #expect(DosingEngine.requestedHighTempBasalRate(basal: 1, insulinRequired: scaled) == Decimal(string: "1.5")!)
+        #expect(DosingEngine.requestedHighTempBasalRate(basal: 1, insulinRequired: 1) == 3)
+    }
+}

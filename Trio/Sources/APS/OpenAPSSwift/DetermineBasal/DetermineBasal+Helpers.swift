@@ -282,6 +282,11 @@ extension Profile {
     /// This function calculates the `profileTarget` variable from Javascript's determineBasal function
     /// including the adjustments for overrides
     func profileTarget(trioCustomOrefVariables: TrioCustomOrefVariables) -> Decimal? {
+        if let exerciseTarget = trioCustomOrefVariables.exerciseAdjustment?.target,
+           !(temptargetSet ?? false)
+        {
+            return max(minBg ?? exerciseTarget, exerciseTarget)
+        }
         let overrideTarget = trioCustomOrefVariables.overrideTarget
         if overrideTarget != 0, overrideTarget != 6, trioCustomOrefVariables
             .useOverride, !(temptargetSet ?? false)
