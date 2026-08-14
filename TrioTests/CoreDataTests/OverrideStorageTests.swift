@@ -300,4 +300,16 @@ import Testing
         #expect(DosingEngine.requestedHighTempBasalRate(basal: 1, insulinRequired: scaled) == Decimal(string: "1.5")!)
         #expect(DosingEngine.requestedHighTempBasalRate(basal: 1, insulinRequired: 1) == 3)
     }
+
+    @Test("SMB uses the scaled correction requirement") func smbUsesScaledRequirement() {
+        let normal = DosingEngine.recommendedMicroBolus(
+            insulinRequired: 1, deliveryRatio: Decimal(string: "0.5")!, maxBolus: 1, bolusIncrement: Decimal(string: "0.1")!
+        )
+        let scaled = DosingEngine.exerciseScaledInsulinRequired(1, scale: Decimal(string: "0.25")!)
+        let exercise = DosingEngine.recommendedMicroBolus(
+            insulinRequired: scaled, deliveryRatio: Decimal(string: "0.5")!, maxBolus: 1, bolusIncrement: Decimal(string: "0.1")!
+        )
+        #expect(normal == Decimal(string: "0.5")!)
+        #expect(exercise == Decimal(string: "0.1")!)
+    }
 }

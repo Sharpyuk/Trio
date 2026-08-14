@@ -101,6 +101,11 @@ extension Home {
                         .padding(.trailing, 16)
                 }
             }
+            .overlay(alignment: .topLeading) {
+                ExerciseHomeBadge(coordinator: resolver.resolve(ExerciseCoordinator.self)!)
+                    .padding(.leading, 16)
+                    .padding(.top, 6)
+            }
         }
 
         private var currentBasalRateLabel: String? {

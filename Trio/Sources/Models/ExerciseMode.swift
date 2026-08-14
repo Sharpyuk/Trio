@@ -68,10 +68,10 @@ struct ExercisePreset: Codable, Equatable, Identifiable {
             name: name,
             preExerciseDurationMinutes: pre,
             preExercise: ExercisePhaseSettings(
-                basalPercentage: 0,
+                basalPercentage: basal,
                 smbEnabled: false,
                 target: nil,
-                insulinStrengthPercentage: 0
+                insulinStrengthPercentage: strength
             ),
             active: ExercisePhaseSettings(
                 basalPercentage: basal,
@@ -258,8 +258,58 @@ enum ExerciseReconciler {
 struct ExercisePersistedState: Codable, Equatable {
     var activeSession: ExerciseSession?
     var presets: [ExercisePreset]
+    var history: [ExerciseSession]
+    var reports: [ExerciseReport]
 
-    static let initial = ExercisePersistedState(activeSession: nil, presets: ExercisePreset.defaults)
+    static let initial = ExercisePersistedState(activeSession: nil, presets: ExercisePreset.defaults, history: [], reports: [])
+
+    init(
+        activeSession: ExerciseSession?,
+        presets: [ExercisePreset],
+        history: [ExerciseSession] = [],
+        reports: [ExerciseReport] = []
+    ) {
+        self.activeSession = activeSession
+        self.presets = presets
+        self.history = history
+        self.reports = reports
+    }
+
+    private enum CodingKeys: String, CodingKey { case activeSession, presets, history, reports }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        activeSession = try container.decodeIfPresent(ExerciseSession.self, forKey: .activeSession)
+        presets = try container.decodeIfPresent([ExercisePreset].self, forKey: .presets) ?? ExercisePreset.defaults
+        history = try container.decodeIfPresent([ExerciseSession].self, forKey: .history) ?? []
+        reports = try container.decodeIfPresent([ExerciseReport].self, forKey: .reports) ?? []
+    }
+}
+
+struct ExerciseReport: Codable, Equatable, Identifiable {
+    var id: UUID { sessionID }
+    var sessionID: UUID
+    var type: String
+    var plannedStart: Date
+    var actualStart: Date?
+    var actualEnd: Date?
+    var duration: TimeInterval?
+    var bgStart: Int?
+    var bgEnd: Int?
+    var bgMinimum: Int?
+    var bgMaximum: Int?
+    var iobStart: Decimal?
+    var iobEnd: Decimal?
+    var insulinDelivered: Decimal?
+    var smbDelivered: Decimal
+    var tempBasalSummary: String
+    var basalPercentage: Decimal
+    var insulinStrengthPercentage: Decimal
+    var target: Decimal?
+    var recommendedRecoveryDuration: TimeInterval?
+    var actualRecoveryDuration: TimeInterval?
+    var announcementsEnabled: Bool
+    var announcementIntervalMinutes: Int
 }
 
 protocol ExerciseStorage {

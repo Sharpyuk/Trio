@@ -28,6 +28,12 @@
 		191F62682AD6B05A004D7911 /* NightscoutSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 191F62672AD6B05A004D7911 /* NightscoutSettings.swift */; };
 		1935364028496F7D001E0B16 /* TrioCustomOrefVariables.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1935363F28496F7D001E0B16 /* TrioCustomOrefVariables.swift */; };
 		EAC100012F60000100000001 /* ExerciseMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAC100022F60000100000001 /* ExerciseMode.swift */; };
+		EAC100032F60000100000001 /* ExerciseCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAC100052F60000100000001 /* ExerciseCoordinator.swift */; };
+		EAC100042F60000100000001 /* ExerciseAnnouncementManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAC100062F60000100000001 /* ExerciseAnnouncementManager.swift */; };
+		EAC100082F60000100000001 /* ExerciseDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAC100112F60000100000001 /* ExerciseDashboardView.swift */; };
+		EAC100092F60000100000001 /* ExerciseScheduleSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAC100122F60000100000001 /* ExerciseScheduleSheet.swift */; };
+		EAC100102F60000100000001 /* ExercisePresetEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAC100132F60000100000001 /* ExercisePresetEditor.swift */; };
+		EAC100152F60000100000001 /* ExercisePhaseChartView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAC100162F60000100000001 /* ExercisePhaseChartView.swift */; };
 		193F6CDD2A512C8F001240FD /* Loops.swift in Sources */ = {isa = PBXBuildFile; fileRef = 193F6CDC2A512C8F001240FD /* Loops.swift */; };
 		195D80B42AF6973A00D25097 /* DynamicSettingsRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 195D80B32AF6973A00D25097 /* DynamicSettingsRootView.swift */; };
 		195D80B72AF697B800D25097 /* DynamicSettingsDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 195D80B62AF697B800D25097 /* DynamicSettingsDataFlow.swift */; };
@@ -1074,6 +1080,12 @@
 		191F62672AD6B05A004D7911 /* NightscoutSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NightscoutSettings.swift; sourceTree = "<group>"; };
 		1935363F28496F7D001E0B16 /* TrioCustomOrefVariables.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrioCustomOrefVariables.swift; sourceTree = "<group>"; };
 		EAC100022F60000100000001 /* ExerciseMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseMode.swift; sourceTree = "<group>"; };
+		EAC100052F60000100000001 /* ExerciseCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseCoordinator.swift; sourceTree = "<group>"; };
+		EAC100062F60000100000001 /* ExerciseAnnouncementManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseAnnouncementManager.swift; sourceTree = "<group>"; };
+		EAC100112F60000100000001 /* ExerciseDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseDashboardView.swift; sourceTree = "<group>"; };
+		EAC100122F60000100000001 /* ExerciseScheduleSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseScheduleSheet.swift; sourceTree = "<group>"; };
+		EAC100132F60000100000001 /* ExercisePresetEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExercisePresetEditor.swift; sourceTree = "<group>"; };
+		EAC100162F60000100000001 /* ExercisePhaseChartView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExercisePhaseChartView.swift; sourceTree = "<group>"; };
 		193F6CDC2A512C8F001240FD /* Loops.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Loops.swift; sourceTree = "<group>"; };
 		195D80B32AF6973A00D25097 /* DynamicSettingsRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynamicSettingsRootView.swift; sourceTree = "<group>"; };
 		195D80B62AF697B800D25097 /* DynamicSettingsDataFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynamicSettingsDataFlow.swift; sourceTree = "<group>"; };
@@ -2475,6 +2487,7 @@
 		3811DE9125C9D88200A708ED /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				EAC100072F60000100000001 /* Exercise */,
 				BD1179262F4E22C100F90001 /* Alerts */,
 				3811DE9225C9D88200A708ED /* Appearance */,
 				DDA9AC072D67291600E6F1A9 /* AppVersionChecker */,
@@ -2498,6 +2511,15 @@
 				38E8754D275556E100975559 /* WatchManager */,
 			);
 			path = Services;
+			sourceTree = "<group>";
+		};
+		EAC100072F60000100000001 /* Exercise */ = {
+			isa = PBXGroup;
+			children = (
+				EAC100052F60000100000001 /* ExerciseCoordinator.swift */,
+				EAC100062F60000100000001 /* ExerciseAnnouncementManager.swift */,
+			);
+			path = Exercise;
 			sourceTree = "<group>";
 		};
 		3811DE9225C9D88200A708ED /* Appearance */ = {
@@ -3791,6 +3813,7 @@
 		BDDAF9F12D0055CC00B34E7A /* ChartElements */ = {
 			isa = PBXGroup;
 			children = (
+				EAC100162F60000100000001 /* ExercisePhaseChartView.swift */,
 				DD2CC85B2D25D9CE00445446 /* GlucoseTargetsView.swift */,
 				BDDAF9EE2D00553E00B34E7A /* SelectionPopoverView.swift */,
 				582DF9742C8CDB92001F516D /* GlucoseChartView.swift */,
@@ -4422,12 +4445,23 @@
 		DDD1630A2C4C67F000CD525A /* View */ = {
 			isa = PBXGroup;
 			children = (
+				EAC100142F60000100000001 /* Exercise */,
 				DD5DC9F52CF3DA8900AB8703 /* ViewElements */,
 				DDD163172C4C694000CD525A /* AdjustmentsRootView.swift */,
 				BD793CAD2CE7660C00D669AC /* Overrides */,
 				BD793CAE2CE7661D00D669AC /* TempTargets */,
 			);
 			path = View;
+			sourceTree = "<group>";
+		};
+		EAC100142F60000100000001 /* Exercise */ = {
+			isa = PBXGroup;
+			children = (
+				EAC100112F60000100000001 /* ExerciseDashboardView.swift */,
+				EAC100122F60000100000001 /* ExerciseScheduleSheet.swift */,
+				EAC100132F60000100000001 /* ExercisePresetEditor.swift */,
+			);
+			path = Exercise;
 			sourceTree = "<group>";
 		};
 		DDDD0FFD2F4E231600F9C645 /* Mocks */ = {
@@ -5399,6 +5433,12 @@
 				DD1DB7CC2BECCA1F0048B367 /* BuildDetails.swift in Sources */,
 				1935364028496F7D001E0B16 /* TrioCustomOrefVariables.swift in Sources */,
 				EAC100012F60000100000001 /* ExerciseMode.swift in Sources */,
+				EAC100032F60000100000001 /* ExerciseCoordinator.swift in Sources */,
+				EAC100042F60000100000001 /* ExerciseAnnouncementManager.swift in Sources */,
+				EAC100082F60000100000001 /* ExerciseDashboardView.swift in Sources */,
+				EAC100092F60000100000001 /* ExerciseScheduleSheet.swift in Sources */,
+				EAC100102F60000100000001 /* ExercisePresetEditor.swift in Sources */,
+				EAC100152F60000100000001 /* ExercisePhaseChartView.swift in Sources */,
 				CE2FAD3A297D93F0001A872C /* BloodGlucoseExtensions.swift in Sources */,
 				38E4453A274E411700EC9A94 /* Disk+[UIImage].swift in Sources */,
 				DD73FA0F2D74F58E00D19D1E /* BackgroundTask+Helper.swift in Sources */,

@@ -929,6 +929,11 @@ extension MainChartCanvas {
                 viewContext: context
             )
 
+            ExercisePhaseChartView(
+                sessions: state.exerciseSessionsForChart,
+                units: state.units
+            )
+
             GlucoseChartView(
                 glucoseData: glucose,
                 units: state.units,

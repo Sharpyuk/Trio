@@ -87,6 +87,7 @@ extension Notification.Name {
         _ = resolver.resolve(IOBService.self)!
         _ = resolver.resolve(GlucoseAlertCoordinator.self)!
         _ = resolver.resolve(NotLoopingMonitor.self)!
+        resolver.resolve(ExerciseCoordinator.self)!.reconcile()
         _ = DeviceAlertsStore.shared
         // Last: needs the pump manager's AlertResponder registration and the
         // seeded DeviceAlertsStore in place before re-presenting alerts.
@@ -364,6 +365,7 @@ extension Notification.Name {
                 }
                 if initState.complete {
                     performCleanupIfNecessary()
+                    resolver.resolve(ExerciseCoordinator.self)?.reconcile()
                 }
             }
         }

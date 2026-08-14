@@ -27,6 +27,13 @@ extension Home {
         @ObservationIgnored @Injected() var iobService: IOBService!
         @ObservationIgnored @Injected() var fileStorage: FileStorage!
         @ObservationIgnored @Injected() var unlockmanager: UnlockManager!
+        @ObservationIgnored @Injected() var exerciseCoordinator: ExerciseCoordinator!
+
+        var exerciseSessionsForChart: [ExerciseSession] {
+            var sessions = exerciseCoordinator.history
+            if let active = exerciseCoordinator.activeSession { sessions.append(active) }
+            return sessions
+        }
 
         var cgmStateModel: CGMSettings.StateModel {
             CGMSettings.StateModel.shared

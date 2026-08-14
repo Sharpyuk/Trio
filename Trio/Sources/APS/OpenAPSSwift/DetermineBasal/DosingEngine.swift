@@ -801,10 +801,12 @@ enum DosingEngine {
             trioCustomOrefVariables: trioCustomOrefVariables
         )
 
-        let smbDeliveryRatio = min(profile.smbDeliveryRatio, 1)
-        let roundSmbTo = 1 / profile.bolusIncrement
-        let microBolusWithoutRounding = min(insulinRequired * smbDeliveryRatio, maxBolus)
-        let microBolus = (microBolusWithoutRounding * roundSmbTo).floor() / roundSmbTo
+        let microBolus = recommendedMicroBolus(
+            insulinRequired: insulinRequired,
+            deliveryRatio: profile.smbDeliveryRatio,
+            maxBolus: maxBolus,
+            bolusIncrement: profile.bolusIncrement
+        )
 
         let worstCaseInsulinRequired = (targetGlucose - (naiveEventualGlucose + minIOBForecastedGlucose) / 2) /
             adjustedSensitivity
@@ -879,6 +881,19 @@ enum DosingEngine {
         }
 
         return (false, newDetermination)
+    }
+
+    static func recommendedMicroBolus(
+        insulinRequired: Decimal,
+        deliveryRatio: Decimal,
+        maxBolus: Decimal,
+        bolusIncrement: Decimal
+    ) -> Decimal {
+        guard insulinRequired > 0, bolusIncrement > 0 else { return 0 }
+        let ratio = min(max(0, deliveryRatio), 1)
+        let roundSmbTo = 1 / bolusIncrement
+        let unrounded = min(insulinRequired * ratio, maxBolus)
+        return (unrounded * roundSmbTo).floor() / roundSmbTo
     }
 
     /// Determines and sets a high temp basal if required to bring glucose down.

@@ -66,7 +66,9 @@ extension Adjustments {
                     List {
                         switch state.selectedTab {
                         case .overrides: overrides()
-                        case .tempTargets: tempTargets() }
+                        case .tempTargets: tempTargets()
+                        case .exercise: ExerciseDashboardView(coordinator: resolver.resolve(ExerciseCoordinator.self)!)
+                        }
                     }
                     .scrollContentBackground(.hidden)
                     .background(appState.trioBackgroundColor(for: colorScheme))
@@ -110,6 +112,8 @@ extension Adjustments {
                                     Image(systemName: "plus")
                                 }
                             })
+                        case .exercise:
+                            EmptyView()
                         }
                     }
                 }
@@ -215,6 +219,8 @@ extension Adjustments {
                     .textCase(nil)
                     .foregroundStyle(.secondary)
                 }
+            case .exercise:
+                EmptyView()
             }
         }
 
@@ -270,6 +276,8 @@ extension Adjustments {
                     }
                 }
                 .listRowBackground(Color.loopGreen.opacity(0.8))
+            case .exercise:
+                EmptyView()
             }
         }
 
@@ -297,6 +305,8 @@ extension Adjustments {
                     .disabled(!state.isTempTargetEnabled)
                     .listRowBackground(!state.isTempTargetEnabled ? Color(.systemGray4) : Color(.systemRed))
                     .tint(.white)
+            case .exercise:
+                EmptyView()
             }
         }
 
