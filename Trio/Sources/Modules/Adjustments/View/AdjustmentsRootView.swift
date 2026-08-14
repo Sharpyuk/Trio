@@ -624,6 +624,19 @@ struct ExerciseModeForm: View {
                     if state.scheduleExerciseForFuture {
                         DatePicker("Exercise Start Time", selection: $state.exerciseStartDate, in: Date.now...)
                     }
+
+                    Toggle("Use planned duration", isOn: $state.exerciseHasPlannedDuration)
+                    if state.exerciseHasPlannedDuration {
+                        durationStepper(
+                            title: String(localized: "Exercise duration"),
+                            value: Binding(
+                                get: { Int(state.exerciseDuration) },
+                                set: { state.exerciseDuration = Decimal($0) }
+                            ),
+                            range: 10 ... 720,
+                            step: 5
+                        )
+                    }
                 }
                 .listRowBackground(Color.chart)
 
@@ -657,8 +670,8 @@ struct ExerciseModeForm: View {
                             range: 0 ... 120,
                             step: 5
                         )
-                        basalStepper(
-                            title: String(localized: "Basal Rate"),
+                        exerciseStrengthStepper(
+                            title: String(localized: "Pre-exercise insulin strength"),
                             value: $state.preExerciseBasalPercentage
                         )
                         Toggle("Suppress SMBs", isOn: $state.preExerciseSuppressSMB)
@@ -672,8 +685,8 @@ struct ExerciseModeForm: View {
                 .listRowBackground(Color.chart)
 
                 Section(header: Text("Active exercise")) {
-                    basalStepper(
-                        title: String(localized: "Basal Rate"),
+                    exerciseStrengthStepper(
+                        title: String(localized: "Exercise insulin strength"),
                         value: $state.exerciseBasalPercentage
                     )
                     Toggle("Suppress SMBs", isOn: $state.exerciseSuppressSMB)
@@ -732,7 +745,7 @@ struct ExerciseModeForm: View {
                         Text("Sensitivity uses automatic linear decay based on completed exercise duration.")
                             .foregroundStyle(.secondary)
                         basalStepper(
-                            title: String(localized: "Basal Rate"),
+                            title: String(localized: "Recovery basal rate"),
                             value: $state.postExerciseBasalPercentage
                         )
                         Toggle("Suppress SMBs", isOn: $state.postExerciseSuppressSMB)
@@ -887,6 +900,24 @@ struct ExerciseModeForm: View {
             ),
             in: 0 ... 100,
             step: 5
+        ) {
+            HStack {
+                Text(title)
+                Spacer()
+                Text("\(Int(value.wrappedValue))%")
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder private func exerciseStrengthStepper(title: String, value: Binding<Double>) -> some View {
+        Stepper(
+            value: Binding(
+                get: { Int(value.wrappedValue) },
+                set: { value.wrappedValue = Double($0) }
+            ),
+            in: 0 ... 100,
+            step: 25
         ) {
             HStack {
                 Text(title)

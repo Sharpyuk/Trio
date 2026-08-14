@@ -153,6 +153,14 @@ var determine_basal = function determine_basal(glucose_status, currenttemp, iob_
     const smbMinutes = trio_custom_variables.smbMinutes;
     const uamMinutes = trio_custom_variables.uamMinutes;
     const exerciseSensitivityMultiplier = trio_custom_variables.exerciseSensitivityMultiplier || 1;
+    const proteinFatAssistActive = trio_custom_variables.proteinFatAssistActive === true;
+    const proteinFatEarlySMBEnabled = trio_custom_variables.proteinFatEarlySMBEnabled === true;
+    const proteinFatEarlySMBSuppressedByExercise = trio_custom_variables.proteinFatEarlySMBSuppressedByExercise === true;
+    const proteinFatAssistStartBG = Number(trio_custom_variables.proteinFatAssistStartBG) || 0;
+    const proteinFatEarlySMBMinBG = Number(trio_custom_variables.proteinFatEarlySMBMinBG) || 79;
+    const proteinFatEarlySMBMinRise = Number(trio_custom_variables.proteinFatEarlySMBMinRise) || 5.4;
+    const proteinFatEarlySMBMinPredictedRise = Number(trio_custom_variables.proteinFatEarlySMBMinPredictedRise) || 7.2;
+    const proteinFatEarlySMBMaxUnits = Number(trio_custom_variables.proteinFatEarlySMBMaxUnits) || 0;
     // tdd past 24 hour
     let tdd = trio_custom_variables.currentTDD;
     var logOutPut = "";
@@ -1237,6 +1245,59 @@ var maxDelta_bg_threshold;
         enableSMB = false;
     }
 
+    var proteinFatEarlySMB = false;
+    var proteinFatEarlySMBPredictedRise = 0;
+    var proteinFatEarlySMBReason = "";
+    if (proteinFatAssistActive) {
+        var proteinFatPredictedValues = [eventualBG, avgPredBG, minPredBG, lastIOBpredBG];
+        if (typeof maxCOBPredBG !== 'undefined' && maxCOBPredBG < 999) {
+            proteinFatPredictedValues.push(maxCOBPredBG);
+        }
+        if (typeof maxUAMPredBG !== 'undefined' && maxUAMPredBG < 999) {
+            proteinFatPredictedValues.push(maxUAMPredBG);
+        }
+        var proteinFatPredictedPeakBG = Math.max.apply(null, proteinFatPredictedValues.filter(function(value) {
+            return typeof value === 'number' && isFinite(value);
+        }));
+        var proteinFatRiseFromStart = proteinFatAssistStartBG > 0 ? bg - proteinFatAssistStartBG : 0;
+        var proteinFatRecentDeltaPositive = delta > 0 || glucose_status.delta > 0 || short_avgdelta > 0 || minDelta > 0;
+        var proteinFatRisingEnough = proteinFatRiseFromStart >= proteinFatEarlySMBMinRise || proteinFatRecentDeltaPositive;
+        var proteinFatPredictedRiseFromBG = proteinFatPredictedPeakBG - bg;
+        var proteinFatPredictedRiseFromTarget = proteinFatPredictedPeakBG - target_bg;
+        proteinFatEarlySMBPredictedRise = Math.max(proteinFatPredictedRiseFromBG, proteinFatPredictedRiseFromTarget);
+        var proteinFatIOBRoom = max_iob - iob_data.iob;
+
+        if (!proteinFatEarlySMBEnabled) {
+            proteinFatEarlySMBReason = "disabled in Protein/Fat Assist profile";
+        } else if (smbIsOff) {
+            proteinFatEarlySMBReason = "SMBs are disabled by override/settings";
+        } else if (proteinFatEarlySMBSuppressedByExercise) {
+            proteinFatEarlySMBReason = "suppressed by Exercise safety";
+        } else if (!microBolusAllowed) {
+            proteinFatEarlySMBReason = "microbolus not allowed";
+        } else if (enableSMB) {
+            proteinFatEarlySMBReason = "normal SMB already enabled";
+        } else if (bg < proteinFatEarlySMBMinBG) {
+            proteinFatEarlySMBReason = "BG " + convert_bg(bg, profile) + " below minimum " + convert_bg(proteinFatEarlySMBMinBG, profile);
+        } else if (!proteinFatRisingEnough) {
+            proteinFatEarlySMBReason = "rise " + convert_bg(proteinFatRiseFromStart, profile) + " below minimum and recent delta not positive";
+        } else if (proteinFatEarlySMBPredictedRise < proteinFatEarlySMBMinPredictedRise) {
+            proteinFatEarlySMBReason = "predicted rise " + convert_bg(proteinFatEarlySMBPredictedRise, profile) + " below minimum " + convert_bg(proteinFatEarlySMBMinPredictedRise, profile);
+        } else if (minGuardBG < threshold) {
+            proteinFatEarlySMBReason = "minGuardBG " + convert_bg(minGuardBG, profile) + " below threshold " + convert_bg(threshold, profile);
+        } else if (iob_data.iob >= max_iob || proteinFatIOBRoom <= 0) {
+            proteinFatEarlySMBReason = "IOB " + round(iob_data.iob, 2) + " at/above max_iob " + max_iob;
+        } else if (proteinFatEarlySMBMaxUnits <= 0) {
+            proteinFatEarlySMBReason = "max early SMB amount is 0U";
+        } else {
+            proteinFatEarlySMB = true;
+            proteinFatEarlySMBReason = "allowed: BG " + convert_bg(bg, profile) + ", rise " + convert_bg(proteinFatRiseFromStart, profile) + ", predicted rise " + convert_bg(proteinFatEarlySMBPredictedRise, profile) + ", max " + proteinFatEarlySMBMaxUnits + "U";
+        }
+
+        console.error("Protein/Fat early SMB " + proteinFatEarlySMBReason);
+        rT.reason += "Protein/Fat early SMB " + proteinFatEarlySMBReason + "; ";
+    }
+
 // Calculate carbsReq (carbs required to avoid a hypo)
     console.error("BG projected to remain above " + convert_bg(min_bg, profile) + " for " + minutesAboveMinBG + "minutes");
     if ( minutesAboveThreshold < 240 || minutesAboveMinBG < 60 ) {
@@ -1407,7 +1468,7 @@ var maxDelta_bg_threshold;
         rT.insulinForManualBolus = round((rT.eventualBG - rT.target_bg) / sens, 2);
 
         // if in SMB mode, don't cancel SMB zero temp
-        if (! (microBolusAllowed && enableSMB)) {
+        if (! (microBolusAllowed && (enableSMB || proteinFatEarlySMB))) {
             if (glucose_status.delta < minDelta) {
                 rT.reason += "Eventual BG " + convert_bg(eventualBG, profile) + " > " + convert_bg(min_bg, profile) + " but Delta " + convert_bg(tick, profile) + " < Exp. Delta " + convert_bg(expectedDelta, profile);
             } else {
@@ -1433,7 +1494,7 @@ var maxDelta_bg_threshold;
         rT.minPredBG = minPredBG;
 
         // if in SMB mode, don't cancel SMB zero temp
-        if (! (microBolusAllowed && enableSMB )) {
+        if (! (microBolusAllowed && (enableSMB || proteinFatEarlySMB) )) {
             rT.reason += convert_bg(eventualBG, profile)+ "-" + convert_bg(minPredBG, profile) + " in range: no temp required";
             if (currenttemp.duration > 15 && (round_basal(basal, profile) === round_basal(currenttemp.rate, profile))) {
                 rT.reason += ", temp " + currenttemp.rate + " ~ req " + basal + "U/hr. ";
@@ -1481,6 +1542,16 @@ var maxDelta_bg_threshold;
             rT.reason += "max_iob " + max_iob + ", ";
         } else { console.error("Ev. Bolus would not be limited by maxIOB ( insulinForManualBolus: " + insulinForManualBolus + " U).");}
 
+        if (proteinFatEarlySMB && !enableSMB) {
+            var proteinFatEarlyInsulinReq = round(Math.max(0, proteinFatEarlySMBPredictedRise) / sens, 2);
+            if (proteinFatEarlyInsulinReq > max_iob - iob_data.iob) {
+                console.error("Protein/Fat early SMB limited by maxIOB: " + (max_iob - iob_data.iob) + "U room (insulinReq: " + proteinFatEarlyInsulinReq + "U)");
+                proteinFatEarlyInsulinReq = max_iob - iob_data.iob;
+            }
+            insulinReq = round(Math.max(insulinReq, proteinFatEarlyInsulinReq), 3);
+            console.error("Protein/Fat early SMB insulinReq " + insulinReq + "U from predicted rise " + convert_bg(proteinFatEarlySMBPredictedRise, profile));
+        }
+
         // rate required to deliver insulinReq more insulin over 30m:
         rate = basal + (2 * insulinReq);
         rate = round_basal(rate, profile);
@@ -1493,7 +1564,7 @@ var maxDelta_bg_threshold;
         //console.error(lastBolusAge);
         //console.error(profile.temptargetSet, target_bg, rT.COB);
         // only allow microboluses with COB or low temp targets, or within DIA hours of a bolus
-        if (microBolusAllowed && enableSMB && bg > threshold) {
+        if (microBolusAllowed && (enableSMB || proteinFatEarlySMB) && bg > threshold) {
             // never bolus more than maxSMBBasalMinutes worth of basal
 
 
@@ -1554,6 +1625,12 @@ var maxDelta_bg_threshold;
                 console.error("SMB Delivery Ratio changed from default 0.5 to " + round(smb_ratio,2))
             }
             var microBolus = Math.min(insulinReq*smb_ratio, maxBolus);
+            if (proteinFatEarlySMB && !enableSMB) {
+                if (microBolus > proteinFatEarlySMBMaxUnits) {
+                    console.error("Protein/Fat early SMB capped by profile max: " + proteinFatEarlySMBMaxUnits + "U (before cap: " + microBolus + "U)");
+                }
+                microBolus = Math.min(microBolus, proteinFatEarlySMBMaxUnits);
+            }
 
             microBolus = Math.floor(microBolus*roundSMBTo)/roundSMBTo;
             // calculate a long enough zero temp to eventually correct back up to target
@@ -1601,7 +1678,11 @@ var maxDelta_bg_threshold;
             if (lastBolusAge > SMBInterval) {
                 if (microBolus > 0) {
                     rT.units = microBolus;
-                    rT.reason += "Microbolusing " + microBolus + "U. ";
+                    if (proteinFatEarlySMB && !enableSMB) {
+                        rT.reason += "Protein/Fat early microbolusing " + microBolus + "U. ";
+                    } else {
+                        rT.reason += "Microbolusing " + microBolus + "U. ";
+                    }
                 }
             } else {
                 rT.reason += "Waiting " + nextBolusMins + "m " + nextBolusSeconds + "s to microbolus again. ";
@@ -1615,6 +1696,15 @@ var maxDelta_bg_threshold;
                 return rT;
             }
 
+        }
+
+        if (proteinFatEarlySMB && !enableSMB) {
+            rT.reason += "Protein/Fat early SMB does not request extra temp basal. ";
+            if (currenttemp.duration > 15 && (round_basal(basal, profile) === round_basal(currenttemp.rate, profile))) {
+                rT.reason += "temp " + currenttemp.rate + " ~ req " + basal + "U/hr. ";
+                return rT;
+            }
+            return tempBasalFunctions.setTempBasal(basal, 30, profile, rT, currenttemp);
         }
 
         var maxSafeBasal = tempBasalFunctions.getMaxSafeBasal(profile);

@@ -175,7 +175,7 @@ extension Adjustments.RootView {
     private func exercisePresetSummary(_ preset: ExerciseActivityPreset) -> String {
         var labels = [
             "pre \(Int(truncating: NSDecimalNumber(decimal: preset.preExerciseDuration)))m",
-            "basal \(Int(preset.exerciseBasalPercent))%",
+            "strength \(Int(preset.exerciseBasalPercent))%",
             preset.exerciseSMBSuppressed ? "SMB off" : "SMB allowed",
             preset.announceGlucoseEnabled ? "announce on" : "announce off"
         ]

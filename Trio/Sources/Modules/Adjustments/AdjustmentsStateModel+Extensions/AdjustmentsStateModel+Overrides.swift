@@ -482,6 +482,11 @@ extension Adjustments.StateModel {
             let scheduledExerciseStart = scheduleExerciseForFuture
                 ? max(exerciseStartDate, now)
                 : (preMinutes > 0 ? now.addingTimeInterval(preMinutes * 60) : now)
+            let plannedExerciseEnd = exerciseHasPlannedDuration
+                ? scheduledExerciseStart.addingTimeInterval(
+                    NSDecimalNumber(decimal: exerciseDuration).doubleValue * 60
+                )
+                : nil
             let plannedPreStart = preExerciseEnabled && preMinutes > 0
                 ? (scheduleExerciseForFuture ? scheduledExerciseStart.addingTimeInterval(-preMinutes * 60) : now)
                 : scheduledExerciseStart
@@ -514,7 +519,9 @@ extension Adjustments.StateModel {
             } else {
                 initialPhase = .duringExercise
                 initialStart = scheduleExerciseForFuture ? scheduledExerciseStart : now
-                initialDuration = 2160
+                initialDuration = plannedExerciseEnd.map {
+                    Decimal(max(1, $0.timeIntervalSince(initialStart) / 60))
+                } ?? 2160
                 initialBasal = exerciseBasalPercentage
                 initialSMB = exerciseSuppressSMB
                 initialTarget = exerciseTarget
@@ -525,6 +532,7 @@ extension Adjustments.StateModel {
                 exerciseTypeName: exerciseTypeName,
                 sessionCreatedAt: now,
                 scheduledExerciseStart: scheduledExerciseStart,
+                plannedExerciseEnd: plannedExerciseEnd,
                 preExerciseStart: plannedPreStart,
                 actualExerciseStart: initialPhase == .duringExercise ? initialStart : nil,
                 preExerciseEnabled: preExerciseEnabled,
@@ -619,7 +627,9 @@ extension Adjustments.StateModel {
                     phase: .duringExercise
                 )
                 preExerciseOverride.date = now
-                preExerciseOverride.duration = 2160
+                preExerciseOverride.duration = (metadata.plannedExerciseEnd.map {
+                    Decimal(max(1, $0.timeIntervalSince(now) / 60))
+                } ?? 2160) as NSDecimalNumber
                 preExerciseOverride.percentage = metadata.guardrailBasalReenabledAt == nil
                     ? (settings?.basalPercentage ?? exerciseBasalPercentage)
                     : 100
@@ -627,6 +637,9 @@ extension Adjustments.StateModel {
                     ? (settings?.suppressSMB ?? exerciseSuppressSMB)
                     : false
                 preExerciseOverride.target = (settings?.target ?? exerciseTarget) as NSDecimalNumber
+                preExerciseOverride.isfAndCr = true
+                preExerciseOverride.isf = true
+                preExerciseOverride.cr = true
             }
             preExerciseOverride.isUploadedToNS = false
             ExerciseSessionMetadataStore.update(sessionID: sessionID) {
@@ -765,9 +778,12 @@ extension Adjustments.StateModel {
             overrideTarget: overrideTarget,
             target: target,
             advancedSettings: false,
-            isfAndCr: false,
-            isf: false,
-            cr: false,
+            // Oref applies override percentage to current basal. With ISF/CR enabled it also
+            // raises ISF and carb ratio by the inverse percentage, so Exercise insulin strength
+            // reduces temp-basal corrections, SMB limits, and correction aggressiveness together.
+            isfAndCr: phase != .postExercise,
+            isf: phase != .postExercise,
+            cr: phase != .postExercise,
             smbIsScheduledOff: false,
             start: sensitivityPercent,
             end: Decimal(decayType.rawValue),
@@ -811,6 +827,7 @@ extension Adjustments.StateModel {
     @MainActor func advanceExerciseSessionsIfNeeded() async {
         do {
             reconcileStaleExerciseRecoveryReports()
+            try await recreateMissingExercisePhaseOverridesIfNeeded(now: Date())
 
             let request: NSFetchRequest<OverrideStored> = OverrideStored.fetchRequest()
             let sessionIDs = ExerciseSessionMetadataStore.visibleSessionIDs()
@@ -830,6 +847,16 @@ extension Adjustments.StateModel {
                       var metadata = ExerciseSessionMetadataStore.load(sessionID: sessionID)
                 else { continue }
 
+                if override.exercisePhase == .duringExercise,
+                   metadata.actualExerciseEnd == nil,
+                   let plannedExerciseEnd = metadata.plannedExerciseEnd,
+                   now >= plannedExerciseEnd
+                {
+                    await stopExerciseNow(override.objectID)
+                    changed = true
+                    continue
+                }
+
                 switch metadata.state(at: now) {
                 case .exerciseActive where override.exercisePhase == .preExercise:
                     await disableActiveNormalOverrides(createOverrideRunEntry: true)
@@ -840,7 +867,9 @@ extension Adjustments.StateModel {
                         phase: .duringExercise
                     )
                     override.date = metadata.scheduledExerciseStart ?? now
-                    override.duration = 2160
+                    override.duration = (metadata.plannedExerciseEnd.map {
+                        Decimal(max(1, $0.timeIntervalSince(override.date ?? now) / 60))
+                    } ?? 2160) as NSDecimalNumber
                     override.percentage = metadata.guardrailBasalReenabledAt == nil
                         ? (settings?.basalPercentage ?? exerciseBasalPercentage)
                         : 100
@@ -848,6 +877,9 @@ extension Adjustments.StateModel {
                         ? (settings?.suppressSMB ?? exerciseSuppressSMB)
                         : false
                     override.target = (settings?.target ?? exerciseTarget) as NSDecimalNumber
+                    override.isfAndCr = true
+                    override.isf = true
+                    override.cr = true
                     override.isUploadedToNS = false
                     metadata.actualExerciseStart = override.date
                     try? ExerciseSessionMetadataStore.save(metadata)
@@ -882,6 +914,92 @@ extension Adjustments.StateModel {
             debugPrint(
                 "\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to advance Exercise Override sessions: \(error)"
             )
+        }
+    }
+
+    @MainActor private func recreateMissingExercisePhaseOverridesIfNeeded(now: Date) async throws {
+        for metadata in ExerciseSessionMetadataStore.loadAll() {
+            let state = metadata.state(at: now)
+            guard state != .completed, state != .cancelled else { continue }
+
+            let request: NSFetchRequest<OverrideStored> = OverrideStored.fetchRequest()
+            request.predicate = NSPredicate(format: "id == %@ AND enabled == %@", metadata.sessionID, true as NSNumber)
+            let existingEnabled = try viewContext.fetch(request)
+            guard existingEnabled.isEmpty else { continue }
+
+            let phase: ExercisePhase
+            let startDate: Date
+            let duration: Decimal
+            let settings: ExerciseSessionMetadata.PhaseSettings?
+            let suppressSMB: Bool
+            let target: Decimal
+            let overrideTarget: Bool
+            let sensitivityPercent: Decimal
+            let decayType: ExerciseSensitivityDecayType
+
+            switch state {
+            case .preExerciseActive,
+                 .scheduledPreExercise:
+                phase = .preExercise
+                startDate = metadata.preExerciseStart ?? metadata.scheduledExerciseStart ?? now
+                let end = metadata.scheduledExerciseStart ?? now
+                duration = Decimal(max(1, end.timeIntervalSince(startDate) / 60))
+                settings = metadata.preExerciseSettings
+                suppressSMB = settings?.suppressSMB ?? true
+                target = settings?.target ?? preExerciseTarget
+                overrideTarget = true
+                sensitivityPercent = 0
+                decayType = .flat
+
+            case .exerciseActive:
+                phase = .duringExercise
+                startDate = metadata.actualExerciseStart ?? metadata.scheduledExerciseStart ?? now
+                duration = metadata.plannedExerciseEnd.map {
+                    Decimal(max(1, $0.timeIntervalSince(startDate) / 60))
+                } ?? 2160
+                settings = metadata.exerciseSettings
+                suppressSMB = metadata.guardrailSMBReenabledAt == nil ? (settings?.suppressSMB ?? true) : false
+                target = settings?.target ?? exerciseTarget
+                overrideTarget = true
+                sensitivityPercent = 0
+                decayType = .flat
+
+            case .recoveryActive:
+                phase = .postExercise
+                startDate = metadata.recoveryStart ?? metadata.actualExerciseEnd ?? now
+                duration = metadata.recoveryEnd.map {
+                    Decimal(max(1, $0.timeIntervalSince(startDate) / 60))
+                } ?? Decimal(ExerciseRecoveryCalculator.recommendation(forExerciseDurationMinutes: 30).durationMinutes)
+                settings = nil
+                suppressSMB = metadata.postExerciseSuppressSMB
+                target = metadata.postExerciseTargetEnabled ? metadata.postExerciseTarget : 0
+                overrideTarget = metadata.postExerciseTargetEnabled
+                sensitivityPercent = 0
+                decayType = .linear
+
+            case .cancelled,
+                 .completed:
+                continue
+            }
+
+            let strength = metadata.guardrailBasalReenabledAt == nil
+                ? (settings?.insulinStrengthPercentage ?? metadata.postExerciseBasalPercentage)
+                : 100
+
+            try await overrideStorage.storeOverride(override: exerciseOverride(
+                sessionID: metadata.sessionID,
+                exerciseTypeName: metadata.exerciseTypeName,
+                phase: phase,
+                startDate: startDate,
+                duration: duration,
+                basalPercentage: strength,
+                suppressSMB: suppressSMB,
+                target: target,
+                overrideTarget: overrideTarget,
+                sensitivityPercent: sensitivityPercent,
+                decayType: decayType
+            ))
+            debugPrint("ExerciseOverride session \(metadata.sessionID) recreated missing \(phase.rawValue) phase")
         }
     }
 
@@ -1498,6 +1616,8 @@ extension Adjustments.StateModel {
         exerciseModeStartError = nil
         exerciseType = .run
         customExerciseTypeName = ""
+        exerciseHasPlannedDuration = true
+        exerciseDuration = 120
         exercisePresetName = ""
         editingExercisePresetID = nil
         exerciseActivityPresets = ExerciseActivityPresetStore.loadPresets()

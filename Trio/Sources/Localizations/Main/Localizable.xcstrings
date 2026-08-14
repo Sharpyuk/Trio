@@ -40926,6 +40926,9 @@
         }
       }
     },
+    "Allows small SMBs earlier when glucose begins rising after a fat/protein meal." : {
+
+    },
     "Already using Trio and updating from an older version?" : {
       "localizations" : {
         "bg" : {
@@ -103596,6 +103599,9 @@
         }
       }
     },
+    "Early SMB nudges" : {
+
+    },
     "Edit" : {
       "localizations" : {
         "bg" : {
@@ -115860,6 +115866,12 @@
 
     },
     "Exercise announcements" : {
+
+    },
+    "Exercise duration" : {
+
+    },
+    "Exercise insulin strength" : {
 
     },
     "Exercise Mode" : {
@@ -166031,6 +166043,9 @@
         }
       }
     },
+    "Max early SMB" : {
+
+    },
     "Max External Bolus of %@ U Exceeded" : {
       "localizations" : {
         "bg" : {
@@ -173578,6 +173593,9 @@
     "Minimum" : {
 
     },
+    "Minimum BG" : {
+
+    },
     "Minimum duration in minutes for new SMB since last SMB or manual bolus" : {
       "comment" : "\"SMB Interval\"",
       "extractionState" : "manual",
@@ -173833,6 +173851,9 @@
           }
         }
       }
+    },
+    "Minimum rise" : {
+
     },
     "Minimum Safety Threshold" : {
       "localizations" : {
@@ -198876,7 +198897,13 @@
     "Pre-exercise" : {
 
     },
+    "Pre-exercise insulin strength" : {
+
+    },
     "Pre-exercise Settings" : {
+
+    },
+    "Predicted rise" : {
 
     },
     "Prediction Type" : {
@@ -208108,6 +208135,9 @@
 
     },
     "Recovery" : {
+
+    },
+    "Recovery basal rate" : {
 
     },
     "Recovery is calculated from the actual exercise duration when you stop exercise. Under 10 minutes creates a report without recovery sensitivity." : {
@@ -277637,6 +277667,9 @@
           }
         }
       }
+    },
+    "Use planned duration" : {
+
     },
     "Use recommended duration" : {
 

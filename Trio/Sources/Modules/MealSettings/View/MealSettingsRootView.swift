@@ -548,6 +548,67 @@ extension MealSettings {
                         }
                     )
                 }
+
+                Toggle("Early SMB nudges", isOn: Binding(
+                    get: { state.profileSettings(for: profile).earlySMBEnabled },
+                    set: { isEnabled in
+                        state.updateProfile(profile) { $0.earlySMBEnabled = isEnabled }
+                    }
+                ))
+
+                Text("Allows small SMBs earlier when glucose begins rising after a fat/protein meal.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if settings.earlySMBEnabled {
+                    proteinFatAssistEffectRow(
+                        title: "Minimum BG",
+                        value: formattedProteinFatAssistGlucose(settings.earlySMBMinBGMgDL),
+                        decrement: {
+                            state.updateProfile(profile) { $0.earlySMBMinBGMgDL = max(54, $0.earlySMBMinBGMgDL - 1) }
+                        },
+                        increment: {
+                            state.updateProfile(profile) { $0.earlySMBMinBGMgDL = min(180, $0.earlySMBMinBGMgDL + 1) }
+                        }
+                    )
+
+                    proteinFatAssistEffectRow(
+                        title: "Minimum rise",
+                        value: formattedProteinFatAssistGlucose(settings.earlySMBMinRiseMgDL),
+                        decrement: {
+                            state.updateProfile(profile) { $0.earlySMBMinRiseMgDL = max(0, $0.earlySMBMinRiseMgDL - 1) }
+                        },
+                        increment: {
+                            state.updateProfile(profile) { $0.earlySMBMinRiseMgDL = min(54, $0.earlySMBMinRiseMgDL + 1) }
+                        }
+                    )
+
+                    proteinFatAssistEffectRow(
+                        title: "Predicted rise",
+                        value: formattedProteinFatAssistGlucose(settings.earlySMBMinPredictedRiseMgDL),
+                        decrement: {
+                            state.updateProfile(profile) {
+                                $0.earlySMBMinPredictedRiseMgDL = max(0, $0.earlySMBMinPredictedRiseMgDL - 1)
+                            }
+                        },
+                        increment: {
+                            state.updateProfile(profile) {
+                                $0.earlySMBMinPredictedRiseMgDL = min(72, $0.earlySMBMinPredictedRiseMgDL + 1)
+                            }
+                        }
+                    )
+
+                    proteinFatAssistEffectRow(
+                        title: "Max early SMB",
+                        value: formattedProteinFatAssistUnits(settings.earlySMBMaxUnits),
+                        decrement: {
+                            state.updateProfile(profile) { $0.earlySMBMaxUnits = max(0, $0.earlySMBMaxUnits - 0.05) }
+                        },
+                        increment: {
+                            state.updateProfile(profile) { $0.earlySMBMaxUnits = min(1, $0.earlySMBMaxUnits + 0.05) }
+                        }
+                    )
+                }
             }
         }
 
@@ -556,6 +617,17 @@ extension MealSettings {
                 return "\(adjustment.asMmolL.formatted(.number.precision(.fractionLength(1)))) mmol/L"
             }
             return "\(Int(truncating: adjustment as NSNumber)) mg/dL"
+        }
+
+        private func formattedProteinFatAssistGlucose(_ glucose: Decimal) -> String {
+            if state.units == .mmolL {
+                return "\(glucose.asMmolL.formatted(.number.precision(.fractionLength(1)))) mmol/L"
+            }
+            return "\(glucose.formatted(.number.precision(.fractionLength(0)))) mg/dL"
+        }
+
+        private func formattedProteinFatAssistUnits(_ units: Decimal) -> String {
+            "\(units.formatted(.number.precision(.fractionLength(2)))) U"
         }
 
         @ViewBuilder private func proteinFatAssistEffectRow(

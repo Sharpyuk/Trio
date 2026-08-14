@@ -167,13 +167,13 @@ enum ExerciseActivityPresetStore {
     private static let storageKey = "ExerciseActivityPresets.v1"
 
     static let builtInPresets: [ExerciseActivityPreset] = [
-        .builtIn("Run", icon: "figure.run", preBasal: 0, exerciseBasal: 50),
-        .builtIn("Ultra Run", icon: "figure.run", preBasal: 0, exerciseBasal: 30, announce: true),
-        .builtIn("Walk", icon: "figure.walk", preBasal: 50, exerciseBasal: 70),
-        .builtIn("Hike", icon: "figure.hiking", preBasal: 40, exerciseBasal: 60),
-        .builtIn("Cycle", icon: "bicycle", preBasal: 30, exerciseBasal: 50),
+        .builtIn("Run", icon: "figure.run", preBasal: 0, exerciseBasal: 25),
+        .builtIn("Ultra Run", icon: "figure.run", preBasal: 0, exerciseBasal: 25, announce: true),
+        .builtIn("Walk", icon: "figure.walk", preBasal: 50, exerciseBasal: 25),
+        .builtIn("Hike", icon: "figure.hiking", preBasal: 50, exerciseBasal: 25),
+        .builtIn("Cycle", icon: "bicycle", preBasal: 25, exerciseBasal: 25),
         .builtIn("Strength Training", icon: "dumbbell", preBasal: 80, exerciseBasal: 80),
-        .builtIn("Custom", icon: "figure.mixed.cardio", preBasal: 0, exerciseBasal: 50)
+        .builtIn("Custom", icon: "figure.mixed.cardio", preBasal: 0, exerciseBasal: 25)
     ]
 
     static func loadPresets() -> [ExerciseActivityPreset] {
@@ -243,12 +243,15 @@ struct ExerciseSessionMetadata: Codable, Equatable {
         var basalPercentage: Double
         var target: Decimal
         var suppressSMB: Bool
+
+        var insulinStrengthPercentage: Double { basalPercentage }
     }
 
     let sessionID: String
     let exerciseTypeName: String
     var sessionCreatedAt = Date()
     var scheduledExerciseStart: Date?
+    var plannedExerciseEnd: Date?
     var preExerciseStart: Date?
     var actualExerciseStart: Date?
     var actualExerciseEnd: Date?
@@ -277,6 +280,7 @@ struct ExerciseSessionMetadata: Codable, Equatable {
         case exerciseTypeName
         case sessionCreatedAt
         case scheduledExerciseStart
+        case plannedExerciseEnd
         case preExerciseStart
         case actualExerciseStart
         case actualExerciseEnd
@@ -306,6 +310,7 @@ struct ExerciseSessionMetadata: Codable, Equatable {
         exerciseTypeName: String,
         sessionCreatedAt: Date = Date(),
         scheduledExerciseStart: Date? = nil,
+        plannedExerciseEnd: Date? = nil,
         preExerciseStart: Date? = nil,
         actualExerciseStart: Date? = nil,
         actualExerciseEnd: Date? = nil,
@@ -333,6 +338,7 @@ struct ExerciseSessionMetadata: Codable, Equatable {
         self.exerciseTypeName = exerciseTypeName
         self.sessionCreatedAt = sessionCreatedAt
         self.scheduledExerciseStart = scheduledExerciseStart
+        self.plannedExerciseEnd = plannedExerciseEnd
         self.preExerciseStart = preExerciseStart
         self.actualExerciseStart = actualExerciseStart
         self.actualExerciseEnd = actualExerciseEnd
@@ -363,6 +369,7 @@ struct ExerciseSessionMetadata: Codable, Equatable {
         exerciseTypeName = try container.decode(String.self, forKey: .exerciseTypeName)
         sessionCreatedAt = try container.decodeIfPresent(Date.self, forKey: .sessionCreatedAt) ?? Date()
         scheduledExerciseStart = try container.decodeIfPresent(Date.self, forKey: .scheduledExerciseStart)
+        plannedExerciseEnd = try container.decodeIfPresent(Date.self, forKey: .plannedExerciseEnd)
         preExerciseStart = try container.decodeIfPresent(Date.self, forKey: .preExerciseStart)
         actualExerciseStart = try container.decodeIfPresent(Date.self, forKey: .actualExerciseStart)
         actualExerciseEnd = try container.decodeIfPresent(Date.self, forKey: .actualExerciseEnd)
@@ -392,7 +399,7 @@ struct ExerciseSessionMetadata: Codable, Equatable {
     func state(at now: Date = Date()) -> ExerciseSessionState {
         if cancelledAt != nil { return .cancelled }
 
-        if let actualExerciseEnd {
+        if actualExerciseEnd != nil {
             if let recoveryEnd, now < recoveryEnd {
                 return .recoveryActive
             }
@@ -415,6 +422,17 @@ struct ExerciseSessionMetadata: Codable, Equatable {
             return .preExerciseActive
         }
         return .exerciseActive
+    }
+
+    mutating func reconcileTimestamps(at now: Date = Date()) {
+        guard cancelledAt == nil else { return }
+
+        if actualExerciseStart == nil,
+           let scheduledExerciseStart,
+           now >= scheduledExerciseStart
+        {
+            actualExerciseStart = scheduledExerciseStart
+        }
     }
 }
 
@@ -865,6 +883,97 @@ final class ExerciseGlucoseAnnouncementManager: NSObject {
             stopSpeech()
             Foundation.NotificationCenter.default.post(name: .didUpdateOverrideConfiguration, object: nil)
         }
+        if recreateMissingExercisePhaseOverrides(now: now, reason: reason) {
+            changed = true
+        }
+        return changed
+    }
+
+    @discardableResult private func recreateMissingExercisePhaseOverrides(now: Date, reason: String) -> Bool {
+        var changed = false
+
+        for metadata in ExerciseSessionMetadataStore.loadAll() {
+            let state = metadata.state(at: now)
+            guard state != .completed, state != .cancelled else { continue }
+            guard sessionOverrides(sessionID: metadata.sessionID).filter(\.enabled).isEmpty else { continue }
+
+            if state == .exerciseActive,
+               let plannedExerciseEnd = metadata.plannedExerciseEnd,
+               now >= plannedExerciseEnd
+            {
+                createRecoveryFromPlannedEnd(metadata: metadata, plannedExerciseEnd: plannedExerciseEnd, now: now)
+                changed = true
+                continue
+            }
+
+            let phase: ExercisePhase
+            let startDate: Date
+            let duration: Decimal
+            let percentage: Double
+            let suppressSMB: Bool
+            let target: Decimal
+            let overrideTarget: Bool
+
+            switch state {
+            case .preExerciseActive,
+                 .scheduledPreExercise:
+                phase = .preExercise
+                startDate = metadata.preExerciseStart ?? metadata.scheduledExerciseStart ?? now
+                duration = Decimal(max(1, (metadata.scheduledExerciseStart ?? now).timeIntervalSince(startDate) / 60))
+                percentage = metadata.preExerciseSettings?.insulinStrengthPercentage ?? 0
+                suppressSMB = metadata.preExerciseSettings?.suppressSMB ?? true
+                target = metadata.preExerciseSettings?.target ?? 108
+                overrideTarget = true
+
+            case .exerciseActive:
+                phase = .duringExercise
+                startDate = metadata.actualExerciseStart ?? metadata.scheduledExerciseStart ?? now
+                duration = metadata.plannedExerciseEnd.map {
+                    Decimal(max(1, $0.timeIntervalSince(startDate) / 60))
+                } ?? 2160
+                percentage = metadata.guardrailBasalReenabledAt == nil
+                    ? (metadata.exerciseSettings?.insulinStrengthPercentage ?? 25)
+                    : 100
+                suppressSMB = metadata.guardrailSMBReenabledAt == nil
+                    ? (metadata.exerciseSettings?.suppressSMB ?? true)
+                    : false
+                target = metadata.exerciseSettings?.target ?? 108
+                overrideTarget = true
+
+            case .recoveryActive:
+                phase = .postExercise
+                startDate = metadata.recoveryStart ?? metadata.actualExerciseEnd ?? now
+                duration = metadata.recoveryEnd.map {
+                    Decimal(max(1, $0.timeIntervalSince(startDate) / 60))
+                } ?? 1
+                percentage = metadata.postExerciseBasalPercentage
+                suppressSMB = metadata.postExerciseSuppressSMB
+                target = metadata.postExerciseTargetEnabled ? metadata.postExerciseTarget : 0
+                overrideTarget = metadata.postExerciseTargetEnabled
+
+            case .cancelled,
+                 .completed:
+                continue
+            }
+
+            insertExerciseOverride(
+                metadata: metadata,
+                phase: phase,
+                startDate: startDate,
+                duration: duration,
+                percentage: percentage,
+                suppressSMB: suppressSMB,
+                target: target,
+                overrideTarget: overrideTarget
+            )
+            changed = true
+            debugPrint("ExerciseOverride recreate \(reason): session \(metadata.sessionID) phase=\(phase.rawValue)")
+        }
+
+        if context.hasChanges {
+            try? context.save()
+            Foundation.NotificationCenter.default.post(name: .didUpdateOverrideConfiguration, object: nil)
+        }
         return changed
     }
 
@@ -914,7 +1023,7 @@ final class ExerciseGlucoseAnnouncementManager: NSObject {
             try session.setCategory(
                 .playback,
                 mode: .spokenAudio,
-                options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers]
+                options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers, .mixWithOthers]
             )
             try session.setActive(true)
             speechAudioSessionActive = true
@@ -1000,6 +1109,82 @@ final class ExerciseGlucoseAnnouncementManager: NSObject {
         return (try? context.fetch(request)) ?? []
     }
 
+    private func insertExerciseOverride(
+        metadata: ExerciseSessionMetadata,
+        phase: ExercisePhase,
+        startDate: Date,
+        duration: Decimal,
+        percentage: Double,
+        suppressSMB: Bool,
+        target: Decimal,
+        overrideTarget: Bool,
+        sensitivityPercent: Decimal = 0,
+        decayType: ExerciseSensitivityDecayType = .flat
+    ) {
+        let override = OverrideStored(context: context)
+        override.name = OverrideStored.exerciseOverrideName(type: metadata.exerciseTypeName, phase: phase)
+        override.id = metadata.sessionID
+        override.date = startDate
+        override.duration = duration as NSDecimalNumber
+        override.indefinite = false
+        override.percentage = percentage
+        override.enabled = true
+        override.isPreset = false
+        override.isUploadedToNS = false
+        override.smbIsOff = suppressSMB
+        override.target = overrideTarget ? target as NSDecimalNumber : NSDecimalNumber.zero
+        override.advancedSettings = false
+        override.isfAndCr = phase != .postExercise
+        override.isf = phase != .postExercise
+        override.cr = phase != .postExercise
+        override.smbIsScheduledOff = false
+        override.start = sensitivityPercent as NSDecimalNumber
+        override.end = Decimal(decayType.rawValue) as NSDecimalNumber
+    }
+
+    private func createRecoveryFromPlannedEnd(
+        metadata: ExerciseSessionMetadata,
+        plannedExerciseEnd: Date,
+        now: Date
+    ) {
+        let exerciseStart = metadata.actualExerciseStart ?? metadata.scheduledExerciseStart ?? plannedExerciseEnd
+        let exerciseDurationMinutes = max(0, plannedExerciseEnd.timeIntervalSince(exerciseStart) / 60)
+        let recommendation = metadata.postExerciseEnabled
+            ? ExerciseRecoveryCalculator.recommendation(forExerciseDurationMinutes: exerciseDurationMinutes)
+            : ExerciseRecoveryRecommendation(durationMinutes: 0, sensitivityPercent: 0, decayType: .linear)
+
+        ExerciseSessionMetadataStore.update(sessionID: metadata.sessionID) {
+            $0.actualExerciseStart = exerciseStart
+            $0.actualExerciseEnd = plannedExerciseEnd
+            if recommendation.hasRecoveryEffect {
+                $0.recoveryStart = plannedExerciseEnd
+                $0.recoveryEnd = plannedExerciseEnd.addingTimeInterval(TimeInterval(recommendation.durationMinutes * 60))
+                $0.recoverySkippedReason = nil
+            } else {
+                $0.recoverySkippedReason = metadata.postExerciseEnabled ? "noRecoveryEffect" : "recoveryDisabled"
+            }
+        }
+
+        guard recommendation.hasRecoveryEffect,
+              plannedExerciseEnd.addingTimeInterval(TimeInterval(recommendation.durationMinutes * 60)) > now
+        else {
+            return
+        }
+
+        insertExerciseOverride(
+            metadata: metadata,
+            phase: .postExercise,
+            startDate: plannedExerciseEnd,
+            duration: Decimal(recommendation.durationMinutes),
+            percentage: metadata.postExerciseBasalPercentage,
+            suppressSMB: metadata.postExerciseSuppressSMB,
+            target: metadata.postExerciseTargetEnabled ? metadata.postExerciseTarget : 0,
+            overrideTarget: metadata.postExerciseTargetEnabled,
+            sensitivityPercent: recommendation.sensitivityPercent,
+            decayType: recommendation.decayType
+        )
+    }
+
     private func advanceDueExerciseSessions() {
         let request = OverrideStored.fetchRequest()
         let sessionIDs = ExerciseSessionMetadataStore.visibleSessionIDs()
@@ -1027,7 +1212,9 @@ final class ExerciseGlucoseAnnouncementManager: NSObject {
                     phase: .duringExercise
                 )
                 override.date = metadata.scheduledExerciseStart ?? now
-                override.duration = 2160
+                override.duration = (metadata.plannedExerciseEnd.map {
+                    Decimal(max(1, $0.timeIntervalSince(override.date ?? now) / 60))
+                } ?? 2160) as NSDecimalNumber
                 override.percentage = metadata.guardrailBasalReenabledAt == nil
                     ? (settings?.basalPercentage ?? override.percentage)
                     : 100
@@ -1035,6 +1222,9 @@ final class ExerciseGlucoseAnnouncementManager: NSObject {
                     ? (settings?.suppressSMB ?? override.smbIsOff)
                     : false
                 override.target = (settings?.target ?? override.target?.decimalValue ?? 0) as NSDecimalNumber
+                override.isfAndCr = true
+                override.isf = true
+                override.cr = true
                 override.isUploadedToNS = false
                 metadata.actualExerciseStart = override.date
                 try? ExerciseSessionMetadataStore.save(metadata)

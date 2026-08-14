@@ -22,6 +22,14 @@ struct TrioCustomOrefVariables: JSON, Equatable {
     var smbMinutes: Decimal
     var uamMinutes: Decimal
     var exerciseSensitivityMultiplier: Decimal
+    var proteinFatAssistActive: Bool
+    var proteinFatEarlySMBEnabled: Bool
+    var proteinFatEarlySMBSuppressedByExercise: Bool
+    var proteinFatAssistStartBG: Decimal
+    var proteinFatEarlySMBMinBG: Decimal
+    var proteinFatEarlySMBMinRise: Decimal
+    var proteinFatEarlySMBMinPredictedRise: Decimal
+    var proteinFatEarlySMBMaxUnits: Decimal
 
     init(
         average_total_data: Decimal,
@@ -45,6 +53,14 @@ struct TrioCustomOrefVariables: JSON, Equatable {
         smbMinutes: Decimal,
         uamMinutes: Decimal,
         exerciseSensitivityMultiplier: Decimal = 1,
+        proteinFatAssistActive: Bool = false,
+        proteinFatEarlySMBEnabled: Bool = false,
+        proteinFatEarlySMBSuppressedByExercise: Bool = false,
+        proteinFatAssistStartBG: Decimal = 0,
+        proteinFatEarlySMBMinBG: Decimal = 79,
+        proteinFatEarlySMBMinRise: Decimal = Decimal(54) / 10,
+        proteinFatEarlySMBMinPredictedRise: Decimal = Decimal(72) / 10,
+        proteinFatEarlySMBMaxUnits: Decimal = 0
     ) {
         self.average_total_data = average_total_data
         self.weightedAverage = weightedAverage
@@ -67,6 +83,14 @@ struct TrioCustomOrefVariables: JSON, Equatable {
         self.smbMinutes = smbMinutes
         self.uamMinutes = uamMinutes
         self.exerciseSensitivityMultiplier = exerciseSensitivityMultiplier
+        self.proteinFatAssistActive = proteinFatAssistActive
+        self.proteinFatEarlySMBEnabled = proteinFatEarlySMBEnabled
+        self.proteinFatEarlySMBSuppressedByExercise = proteinFatEarlySMBSuppressedByExercise
+        self.proteinFatAssistStartBG = proteinFatAssistStartBG
+        self.proteinFatEarlySMBMinBG = proteinFatEarlySMBMinBG
+        self.proteinFatEarlySMBMinRise = proteinFatEarlySMBMinRise
+        self.proteinFatEarlySMBMinPredictedRise = proteinFatEarlySMBMinPredictedRise
+        self.proteinFatEarlySMBMaxUnits = proteinFatEarlySMBMaxUnits
     }
 }
 
@@ -93,5 +117,13 @@ extension TrioCustomOrefVariables {
         case smbMinutes
         case uamMinutes
         case exerciseSensitivityMultiplier
+        case proteinFatAssistActive
+        case proteinFatEarlySMBEnabled
+        case proteinFatEarlySMBSuppressedByExercise
+        case proteinFatAssistStartBG
+        case proteinFatEarlySMBMinBG
+        case proteinFatEarlySMBMinRise
+        case proteinFatEarlySMBMinPredictedRise
+        case proteinFatEarlySMBMaxUnits
     }
 }

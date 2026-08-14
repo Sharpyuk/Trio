@@ -84,7 +84,7 @@ extension Adjustments {
         var preExerciseBasalPercentage: Double = 0
         var preExerciseSuppressSMB: Bool = true
         var exerciseTarget: Decimal = 108
-        var exerciseBasalPercentage: Double = 50
+        var exerciseBasalPercentage: Double = 25
         var exerciseSuppressSMB: Bool = true
         var postExerciseEnabled = true
         var postExerciseDuration: Decimal = 480

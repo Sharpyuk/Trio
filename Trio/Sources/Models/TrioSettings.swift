@@ -114,6 +114,19 @@ enum ProteinFatAssistAggressiveness: String, Codable, CaseIterable, Identifiable
             return 10
         }
     }
+
+    var earlySMBMaxUnits: Decimal {
+        switch self {
+        case .mild:
+            return 0.1
+        case .medium:
+            return 0.2
+        case .strong:
+            return 0.3
+        case .custom:
+            return 0.2
+        }
+    }
 }
 
 enum ProteinFatActivityGraphDisplay: String, Codable, CaseIterable, Identifiable, Equatable {
@@ -141,6 +154,11 @@ struct ProteinFatAssistProfileSettings: Codable, Equatable {
     var uamMinutesIncrease: Decimal
     var targetAdjustmentEnabled: Bool
     var targetAdjustmentMgDL: Decimal
+    var earlySMBEnabled: Bool
+    var earlySMBMinBGMgDL: Decimal
+    var earlySMBMinRiseMgDL: Decimal
+    var earlySMBMinPredictedRiseMgDL: Decimal
+    var earlySMBMaxUnits: Decimal
 
     static func defaults(for profile: ProteinFatAssistAggressiveness) -> Self {
         Self(
@@ -148,7 +166,12 @@ struct ProteinFatAssistProfileSettings: Codable, Equatable {
             smbMinutesIncrease: profile.smbMinutesIncrease,
             uamMinutesIncrease: profile.uamMinutesIncrease,
             targetAdjustmentEnabled: false,
-            targetAdjustmentMgDL: profile.targetAdjustmentMgDL
+            targetAdjustmentMgDL: profile.targetAdjustmentMgDL,
+            earlySMBEnabled: true,
+            earlySMBMinBGMgDL: 79,
+            earlySMBMinRiseMgDL: Decimal(54) / 10,
+            earlySMBMinPredictedRiseMgDL: Decimal(72) / 10,
+            earlySMBMaxUnits: profile.earlySMBMaxUnits
         )
     }
 
@@ -158,8 +181,60 @@ struct ProteinFatAssistProfileSettings: Codable, Equatable {
             smbMinutesIncrease: min(max(smbMinutesIncrease, 0), 60),
             uamMinutesIncrease: min(max(uamMinutesIncrease, 0), 60),
             targetAdjustmentEnabled: targetAdjustmentEnabled,
-            targetAdjustmentMgDL: min(max(targetAdjustmentMgDL, 0), 30)
+            targetAdjustmentMgDL: min(max(targetAdjustmentMgDL, 0), 30),
+            earlySMBEnabled: earlySMBEnabled,
+            earlySMBMinBGMgDL: min(max(earlySMBMinBGMgDL, 54), 180),
+            earlySMBMinRiseMgDL: min(max(earlySMBMinRiseMgDL, 0), 54),
+            earlySMBMinPredictedRiseMgDL: min(max(earlySMBMinPredictedRiseMgDL, 0), 72),
+            earlySMBMaxUnits: min(max(earlySMBMaxUnits, 0), 1)
         )
+    }
+}
+
+extension ProteinFatAssistProfileSettings {
+    enum CodingKeys: String, CodingKey {
+        case isfPercent
+        case smbMinutesIncrease
+        case uamMinutesIncrease
+        case targetAdjustmentEnabled
+        case targetAdjustmentMgDL
+        case earlySMBEnabled
+        case earlySMBMinBGMgDL
+        case earlySMBMinRiseMgDL
+        case earlySMBMinPredictedRiseMgDL
+        case earlySMBMaxUnits
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = ProteinFatAssistProfileSettings.defaults(for: .medium)
+
+        isfPercent = (try? container.decode(Decimal.self, forKey: .isfPercent)) ?? defaults.isfPercent
+        smbMinutesIncrease = (try? container.decode(Decimal.self, forKey: .smbMinutesIncrease)) ?? defaults.smbMinutesIncrease
+        uamMinutesIncrease = (try? container.decode(Decimal.self, forKey: .uamMinutesIncrease)) ?? defaults.uamMinutesIncrease
+        targetAdjustmentEnabled = (try? container.decode(Bool.self, forKey: .targetAdjustmentEnabled)) ??
+            defaults.targetAdjustmentEnabled
+        targetAdjustmentMgDL = (try? container.decode(Decimal.self, forKey: .targetAdjustmentMgDL)) ??
+            defaults.targetAdjustmentMgDL
+        earlySMBEnabled = (try? container.decode(Bool.self, forKey: .earlySMBEnabled)) ?? defaults.earlySMBEnabled
+        earlySMBMinBGMgDL = (try? container.decode(Decimal.self, forKey: .earlySMBMinBGMgDL)) ??
+            defaults.earlySMBMinBGMgDL
+        earlySMBMinRiseMgDL = (try? container.decode(Decimal.self, forKey: .earlySMBMinRiseMgDL)) ??
+            defaults.earlySMBMinRiseMgDL
+        earlySMBMinPredictedRiseMgDL =
+            (try? container.decode(Decimal.self, forKey: .earlySMBMinPredictedRiseMgDL)) ??
+            defaults.earlySMBMinPredictedRiseMgDL
+        earlySMBMaxUnits = (try? container.decode(Decimal.self, forKey: .earlySMBMaxUnits)) ?? -1
+    }
+
+    func profileDefaulted(for profile: ProteinFatAssistAggressiveness) -> Self {
+        var settings = self
+
+        if settings.earlySMBMaxUnits < 0 {
+            settings.earlySMBMaxUnits = ProteinFatAssistProfileSettings.defaults(for: profile).earlySMBMaxUnits
+        }
+
+        return settings
     }
 }
 
@@ -387,28 +462,36 @@ extension TrioSettings: Decodable {
             ProteinFatAssistProfileSettings.self,
             forKey: .proteinFatAssistMildProfile
         ) {
-            settings.proteinFatAssistMildProfile = proteinFatAssistMildProfile.sanitized
+            settings.proteinFatAssistMildProfile = proteinFatAssistMildProfile
+                .profileDefaulted(for: .mild)
+                .sanitized
         }
 
         if let proteinFatAssistMediumProfile = try? container.decode(
             ProteinFatAssistProfileSettings.self,
             forKey: .proteinFatAssistMediumProfile
         ) {
-            settings.proteinFatAssistMediumProfile = proteinFatAssistMediumProfile.sanitized
+            settings.proteinFatAssistMediumProfile = proteinFatAssistMediumProfile
+                .profileDefaulted(for: .medium)
+                .sanitized
         }
 
         if let proteinFatAssistStrongProfile = try? container.decode(
             ProteinFatAssistProfileSettings.self,
             forKey: .proteinFatAssistStrongProfile
         ) {
-            settings.proteinFatAssistStrongProfile = proteinFatAssistStrongProfile.sanitized
+            settings.proteinFatAssistStrongProfile = proteinFatAssistStrongProfile
+                .profileDefaulted(for: .strong)
+                .sanitized
         }
 
         if let proteinFatAssistCustomProfile = try? container.decode(
             ProteinFatAssistProfileSettings.self,
             forKey: .proteinFatAssistCustomProfile
         ) {
-            settings.proteinFatAssistCustomProfile = proteinFatAssistCustomProfile.sanitized
+            settings.proteinFatAssistCustomProfile = proteinFatAssistCustomProfile
+                .profileDefaulted(for: .custom)
+                .sanitized
         }
 
         if let proteinFatAssistBaseDuration = try? container.decode(Decimal.self, forKey: .proteinFatAssistBaseDuration) {

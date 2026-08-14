@@ -496,7 +496,11 @@ final class OpenAPS {
     }
 
     func prepareTrioCustomOrefVariables() async throws -> RawJSON {
-        try await context.perform {
+        let trioSettings = storage.retrieve(OpenAPS.Trio.settings, as: TrioSettings.self)
+            ?? TrioSettings(from: OpenAPS.defaults(for: OpenAPS.Trio.settings))
+            ?? TrioSettings()
+
+        return try await context.perform {
             // Retrieve user preferences
             let userPreferences = self.storage.retrieve(OpenAPS.Settings.preferences, as: Preferences.self)
             let weightPercentage = userPreferences?.weightPercentage ?? 1.0
@@ -514,6 +518,11 @@ final class OpenAPS {
             let effectiveOverride = self.effectiveOverride(from: activeOverrides, at: Date())
             let effectiveExerciseSensitivityPercent = effectiveOverride.exerciseSensitivityPercent
             let exerciseSensitivityMultiplier = 1 + effectiveExerciseSensitivityPercent / 100
+            let proteinFatEarlySMBContext = self.proteinFatEarlySMBContext(
+                from: activeOverrides,
+                effectiveOverride: effectiveOverride,
+                settings: trioSettings
+            )
 
             // Calculate averages for Total Daily Dose (TDD)
             let totalTDD = historicalTDDData.compactMap { ($0["total"] as? NSDecimalNumber)?.decimalValue }.reduce(0, +)
@@ -531,6 +540,8 @@ final class OpenAPS {
             let weightedTDD = weightPercentage * averageTDDLastTwoHours + (1 - weightPercentage) * averageTDDLastTenDays
 
             let glucose = try self.fetchGlucose()
+            let proteinFatAssistStartBG = proteinFatEarlySMBContext.assistStartDate
+                .flatMap { self.proteinFatAssistStartGlucose(from: glucose, assistStartDate: $0) } ?? 0
 
             // Prepare Trio's custom oref variables
             let trioCustomOrefVariablesData = TrioCustomOrefVariables(
@@ -554,7 +565,15 @@ final class OpenAPS {
                 end: effectiveOverride.end,
                 smbMinutes: effectiveOverride.smbMinutes ?? maxSMBBasalMinutes,
                 uamMinutes: effectiveOverride.uamMinutes ?? maxUAMBasalMinutes,
-                exerciseSensitivityMultiplier: exerciseSensitivityMultiplier
+                exerciseSensitivityMultiplier: exerciseSensitivityMultiplier,
+                proteinFatAssistActive: proteinFatEarlySMBContext.assistActive,
+                proteinFatEarlySMBEnabled: proteinFatEarlySMBContext.profile.earlySMBEnabled,
+                proteinFatEarlySMBSuppressedByExercise: proteinFatEarlySMBContext.suppressedByExercise,
+                proteinFatAssistStartBG: proteinFatAssistStartBG,
+                proteinFatEarlySMBMinBG: proteinFatEarlySMBContext.profile.earlySMBMinBGMgDL,
+                proteinFatEarlySMBMinRise: proteinFatEarlySMBContext.profile.earlySMBMinRiseMgDL,
+                proteinFatEarlySMBMinPredictedRise: proteinFatEarlySMBContext.profile.earlySMBMinPredictedRiseMgDL,
+                proteinFatEarlySMBMaxUnits: proteinFatEarlySMBContext.profile.earlySMBMaxUnits
             )
 
             // Save and return contents of Trio's custom oref variables
@@ -996,6 +1015,13 @@ extension OpenAPS {
         }
     }
 
+    private struct ProteinFatEarlySMBContext {
+        var assistActive = false
+        var suppressedByExercise = false
+        var assistStartDate: Date?
+        var profile: ProteinFatAssistProfileSettings = .defaults(for: .medium)
+    }
+
     private func effectiveOverride(from activeOverrides: [OverrideStored], at now: Date) -> EffectiveOverride {
         guard !activeOverrides.isEmpty else {
             debug(.openAPS, "Effective override: none")
@@ -1070,6 +1096,67 @@ extension OpenAPS {
         }
 
         return effective
+    }
+
+    private func proteinFatEarlySMBContext(
+        from activeOverrides: [OverrideStored],
+        effectiveOverride: EffectiveOverride,
+        settings: TrioSettings
+    ) -> ProteinFatEarlySMBContext {
+        var context = ProteinFatEarlySMBContext()
+        let normalOverrideActive = activeOverrides.contains { !$0.isExerciseMode && !$0.currentProteinFatAssist }
+
+        guard !normalOverrideActive, let proteinFatAssistOverride = activeOverrides.first(where: \.currentProteinFatAssist) else {
+            return context
+        }
+
+        let exerciseOverride = activeOverrides.first { $0.isExerciseMode }
+        let exerciseTarget = exerciseOverride?.target?.decimalValue ?? 0
+        let exerciseReducesInsulin = (exerciseOverride?.percentage ?? 100) < 100
+        let exerciseDisablesSMB = exerciseOverride?.smbIsOff == true
+        let exerciseUsesSafetyTarget = exerciseTarget > 0
+
+        context.assistActive = true
+        context.suppressedByExercise = exerciseDisablesSMB || exerciseReducesInsulin || exerciseUsesSafetyTarget
+        context.assistStartDate = proteinFatAssistOverride.date
+        context.profile = proteinFatAssistProfile(for: proteinFatAssistOverride, settings: settings).sanitized
+
+        if effectiveOverride.smbIsOff {
+            context.profile.earlySMBEnabled = false
+        }
+
+        return context
+    }
+
+    private func proteinFatAssistProfile(
+        for override: OverrideStored,
+        settings: TrioSettings
+    ) -> ProteinFatAssistProfileSettings {
+        let name = override.name ?? ""
+
+        if name.contains(ProteinFatAssistAggressiveness.mild.displayName) {
+            return settings.proteinFatAssistMildProfile
+        }
+        if name.contains(ProteinFatAssistAggressiveness.strong.displayName) {
+            return settings.proteinFatAssistStrongProfile
+        }
+        return settings.proteinFatAssistMediumProfile
+    }
+
+    private func proteinFatAssistStartGlucose(from glucose: [GlucoseStored], assistStartDate: Date) -> Decimal? {
+        let windowStart = assistStartDate.addingTimeInterval(-10.minutes.timeInterval)
+        let windowEnd = assistStartDate.addingTimeInterval(10.minutes.timeInterval)
+
+        return glucose
+            .filter { glucoseValue in
+                guard let date = glucoseValue.date else { return false }
+                return date >= windowStart && date <= windowEnd
+            }
+            .sorted { lhs, rhs in
+                (lhs.date ?? .distantPast) < (rhs.date ?? .distantPast)
+            }
+            .first
+            .map { Decimal($0.glucose) }
     }
 
     func fetchActiveTempTargets() throws -> [TempTargetStored] {
