@@ -15,16 +15,31 @@ struct ExercisePresetEditor: View {
             Form {
                 TextField("Name", text: $preset.name)
                 Section("Pre Exercise") {
-                    Stepper("Duration: \(preset.preExerciseDurationMinutes) min", value: $preset.preExerciseDurationMinutes, in: 0 ... 180, step: 5)
+                    Stepper(
+                        "Duration: \(preset.preExerciseDurationMinutes) min",
+                        value: $preset.preExerciseDurationMinutes,
+                        in: 0 ... 180,
+                        step: 5
+                    )
                     ExercisePhaseSettingsEditor(settings: $preset.preExercise)
                 }
                 Section("Active Exercise") {
                     ExercisePhaseSettingsEditor(settings: $preset.active)
-                    Stepper("Safety timeout: \(preset.safetyTimeoutMinutes ?? 0) min", value: timeoutBinding, in: 0 ... 1440, step: 15)
+                    Stepper(
+                        "Safety timeout: \(preset.safetyTimeoutMinutes ?? 0) min",
+                        value: timeoutBinding,
+                        in: 0 ... 1440,
+                        step: 15
+                    )
                 }
                 Section("Recovery") {
                     Toggle("Enabled", isOn: $preset.recovery.enabled)
-                    Stepper("Initial sensitivity increase: \(preset.recovery.initialSensitivityIncreasePercentage.formatted())%", value: $preset.recovery.initialSensitivityIncreasePercentage, in: 0 ... 100, step: 5)
+                    Stepper(
+                        "Initial sensitivity increase: \(preset.recovery.initialSensitivityIncreasePercentage.formatted())%",
+                        value: $preset.recovery.initialSensitivityIncreasePercentage,
+                        in: 0 ... 100,
+                        step: 5
+                    )
                     OptionalExerciseTargetEditor(target: $preset.recovery.target)
                 }
                 Section("Audio announcements") {
@@ -38,7 +53,8 @@ struct ExercisePresetEditor: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save(preset); dismiss() }.disabled(preset.name.trimmingCharacters(in: .whitespaces).isEmpty)
+                    Button("Save") { save(preset)
+                        dismiss() }.disabled(preset.name.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
         }
@@ -66,7 +82,12 @@ private struct OptionalExerciseTargetEditor: View {
     var body: some View {
         Toggle("Custom target", isOn: Binding(get: { target != nil }, set: { target = $0 ? (target ?? 110) : nil }))
         if target != nil {
-            Stepper("Target: \((target ?? 110).formatted()) mg/dL", value: Binding(get: { target ?? 110 }, set: { target = $0 }), in: 70 ... 250, step: 5)
+            Stepper(
+                "Target: \((target ?? 110).formatted()) mg/dL",
+                value: Binding(get: { target ?? 110 }, set: { target = $0 }),
+                in: 70 ... 250,
+                step: 5
+            )
         }
     }
 }

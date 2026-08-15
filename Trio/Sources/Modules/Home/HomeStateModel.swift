@@ -27,11 +27,11 @@ extension Home {
         @ObservationIgnored @Injected() var iobService: IOBService!
         @ObservationIgnored @Injected() var fileStorage: FileStorage!
         @ObservationIgnored @Injected() var unlockmanager: UnlockManager!
-        @ObservationIgnored @Injected() var exerciseCoordinator: ExerciseCoordinator!
 
-        var exerciseSessionsForChart: [ExerciseSession] {
-            var sessions = exerciseCoordinator.history
-            if let active = exerciseCoordinator.activeSession { sessions.append(active) }
+        @MainActor var exerciseSessionsForChart: [ExerciseSession] {
+            guard let coordinator = resolver?.resolve(ExerciseCoordinator.self) else { return [] }
+            var sessions = coordinator.history
+            if let active = coordinator.activeSession { sessions.append(active) }
             return sessions
         }
 

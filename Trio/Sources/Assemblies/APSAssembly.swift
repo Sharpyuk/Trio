@@ -10,6 +10,10 @@ final class APSAssembly: Assembly {
         container.register(BluetoothStateManager.self) { r in BaseBluetoothStateManager(resolver: r) }
         container.register(PluginManager.self) { r in BasePluginManager(resolver: r) }
         container.register(CalibrationService.self) { r in BaseCalibrationService(resolver: r) }
-        container.register(ExerciseCoordinator.self) { r in ExerciseCoordinator(resolver: r) }
+        container.register(ExerciseCoordinator.self) { resolver in
+            MainActor.assumeIsolated {
+                ExerciseCoordinator(resolver: resolver)
+            }
+        }
     }
 }

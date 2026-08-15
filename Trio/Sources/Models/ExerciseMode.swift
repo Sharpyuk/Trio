@@ -68,10 +68,10 @@ struct ExercisePreset: Codable, Equatable, Identifiable {
             name: name,
             preExerciseDurationMinutes: pre,
             preExercise: ExercisePhaseSettings(
-                basalPercentage: basal,
+                basalPercentage: 0,
                 smbEnabled: false,
                 target: nil,
-                insulinStrengthPercentage: strength
+                insulinStrengthPercentage: 0
             ),
             active: ExercisePhaseSettings(
                 basalPercentage: basal,
@@ -138,7 +138,7 @@ struct ExerciseSession: Codable, Equatable, Identifiable {
         scheduledExerciseStart.addingTimeInterval(-Double(preset.preExerciseDurationMinutes) * 60)
     }
 
-    func phase(at now: Date) -> ExercisePhase {
+    func phase(at _: Date) -> ExercisePhase {
         if cancelledAt != nil { return .cancelled }
         if completedAt != nil { return .completed }
         if recoveryStart != nil, actualRecoveryEnd == nil { return .recovery }
@@ -255,7 +255,7 @@ enum ExerciseReconciler {
     }
 }
 
-struct ExercisePersistedState: Codable, Equatable {
+struct ExercisePersistedState: Codable, Equatable, JSON {
     var activeSession: ExerciseSession?
     var presets: [ExercisePreset]
     var history: [ExerciseSession]
@@ -314,7 +314,7 @@ struct ExerciseReport: Codable, Equatable, Identifiable {
 
 protocol ExerciseStorage {
     func load() async -> ExercisePersistedState
-    func update(_ mutation: @Sendable (inout ExercisePersistedState) -> Void) async -> ExercisePersistedState
+    func update(_ mutation: @Sendable(inout ExercisePersistedState) -> Void) async -> ExercisePersistedState
 }
 
 actor BaseExerciseStorage: ExerciseStorage {
@@ -329,7 +329,7 @@ actor BaseExerciseStorage: ExerciseStorage {
         await storage.retrieveAsync(file, as: ExercisePersistedState.self) ?? .initial
     }
 
-    func update(_ mutation: @Sendable (inout ExercisePersistedState) -> Void) async -> ExercisePersistedState {
+    func update(_ mutation: @Sendable(inout ExercisePersistedState) -> Void) async -> ExercisePersistedState {
         var state = await load()
         mutation(&state)
         await storage.saveAsync(state, as: file)

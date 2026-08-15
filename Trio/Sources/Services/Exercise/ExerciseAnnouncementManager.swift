@@ -49,11 +49,15 @@ import Foundation
 
     private func spokenTrend(_ direction: BloodGlucose.Direction) -> String {
         switch direction {
-        case .tripleUp, .doubleUp: "rising rapidly"
-        case .singleUp, .fortyFiveUp: "rising"
+        case .doubleUp,
+             .tripleUp: "rising rapidly"
+        case .fortyFiveUp,
+             .singleUp: "rising"
         case .flat: "steady"
-        case .fortyFiveDown, .singleDown: "falling"
-        case .doubleDown, .tripleDown: "falling rapidly"
+        case .fortyFiveDown,
+             .singleDown: "falling"
+        case .doubleDown,
+             .tripleDown: "falling rapidly"
         default: "trend unavailable"
         }
     }

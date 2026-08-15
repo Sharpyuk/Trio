@@ -25,7 +25,16 @@ import Swinject
             announcer.stop()
             return
         }
+        let previousSession = session
         ExerciseReconciler.reconcile(&session, at: now)
+
+        // Most reconciliations only verify persisted timestamps. Avoid publishing an
+        // equivalent state and rewriting JSON, both of which force unnecessary UI work.
+        guard session != previousSession else {
+            updateAnnouncements(at: now)
+            return
+        }
+
         state.activeSession = session
         archiveTerminalSessionIfNeeded(at: now)
         persist()
@@ -148,7 +157,9 @@ import Swinject
             // separately because reconstructing volume requires paired duration records.
             insulinDelivered: bolusDelivered,
             smbDelivered: smbDelivered,
-            tempBasalSummary: temps.isEmpty ? "No temp basal records" : "\(temps.count) temp basal changes; rates \(temps.compactMap(\.rate).map(String.init(describing:)).joined(separator: ", ")) U/hr",
+            tempBasalSummary: temps
+                .isEmpty ? "No temp basal records" :
+                "\(temps.count) temp basal changes; rates \(temps.compactMap(\.rate).map(String.init(describing:)).joined(separator: ", ")) U/hr",
             basalPercentage: session.preset.active.basalPercentage,
             insulinStrengthPercentage: session.preset.active.insulinStrengthPercentage,
             target: session.preset.active.target,

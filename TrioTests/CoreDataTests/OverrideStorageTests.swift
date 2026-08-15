@@ -254,6 +254,51 @@ import Testing
         #expect(value.actualExerciseStart == active)
     }
 
+    @Test("Relaunch derives pre-exercise and active phases from persisted timestamps") func relaunchReconciliation() {
+        let start = Date(timeIntervalSince1970: 1_000_000)
+
+        var preExercise = session(start: start, created: start.addingTimeInterval(-3600))
+        ExerciseReconciler.reconcile(&preExercise, at: start.addingTimeInterval(-60))
+        #expect(preExercise.phase(at: start.addingTimeInterval(-60)) == .preExercise)
+        #expect(preExercise.actualExerciseStart == nil)
+
+        var active = session(start: start, created: start.addingTimeInterval(-3600))
+        ExerciseReconciler.reconcile(&active, at: start.addingTimeInterval(60))
+        #expect(active.phase(at: start.addingTimeInterval(60)) == .active)
+        #expect(active.actualExerciseStart == start)
+    }
+
+    @Test("Pre, active, recovery, and completion timestamps are unique") func phaseTransitionsAreUnique() {
+        let start = Date(timeIntervalSince1970: 1_000_000)
+        var value = session(start: start, created: start.addingTimeInterval(-3600))
+        ExerciseReconciler.reconcile(&value, at: start)
+        ExerciseReconciler.stopExercise(&value, at: start.addingTimeInterval(30 * 60))
+
+        #expect(value.actualPreExerciseStart != nil)
+        #expect(value.actualExerciseStart == start)
+        #expect(value.actualExerciseEnd == start.addingTimeInterval(30 * 60))
+        #expect(value.recoveryStart == value.actualExerciseEnd)
+        #expect(value.phase(at: start.addingTimeInterval(31 * 60)) == .recovery)
+
+        let recoveryEnd = value.recommendedRecoveryEnd!
+        ExerciseReconciler.reconcile(&value, at: recoveryEnd.addingTimeInterval(60))
+        let completed = value
+        ExerciseReconciler.reconcile(&value, at: recoveryEnd.addingTimeInterval(120))
+        #expect(value == completed)
+        #expect(value.actualRecoveryEnd == recoveryEnd)
+        #expect(value.completedAt == recoveryEnd)
+        #expect(value.phase(at: recoveryEnd) == .completed)
+    }
+
+    @Test("Default pre-exercise settings are independent from active settings") func independentPreExerciseDefaults() {
+        for preset in ExercisePreset.defaults {
+            #expect(preset.preExercise.basalPercentage == 0)
+            #expect(preset.preExercise.insulinStrengthPercentage == 0)
+            #expect(preset.preExercise.smbEnabled == false)
+            #expect(preset.preExercise.target == nil)
+        }
+    }
+
     @Test("Optional target stays absent") func optionalTarget() {
         let start = Date()
         var value = session(start: start)
@@ -278,18 +323,17 @@ import Testing
 @Suite("Exercise correction scaling tests") struct ExerciseCorrectionScalingTests {
     @Test("Positive correction scales deterministically", arguments: [
         (Decimal(1), Decimal(1)),
+        (Decimal(string: "0.75")!, Decimal(string: "0.75")!),
         (Decimal(string: "0.5")!, Decimal(string: "0.5")!),
         (Decimal(string: "0.25")!, Decimal(string: "0.25")!),
         (Decimal(0), Decimal(0))
-    ])
-    func positiveCorrection(scale: Decimal, expected: Decimal) {
+    ]) func positiveCorrection(scale: Decimal, expected: Decimal) {
         #expect(DosingEngine.exerciseScaledInsulinRequired(1, scale: scale) == expected)
     }
 
     @Test("Negative correction is preserved exactly", arguments: [
-        Decimal(1), Decimal(string: "0.5")!, Decimal(string: "0.25")!, Decimal(0)
-    ])
-    func negativeCorrection(scale: Decimal) {
+        Decimal(1), Decimal(string: "0.75")!, Decimal(string: "0.5")!, Decimal(string: "0.25")!, Decimal(0)
+    ]) func negativeCorrection(scale: Decimal) {
         let requirement = Decimal(string: "-0.375")!
         #expect(DosingEngine.exerciseScaledInsulinRequired(requirement, scale: scale) == requirement)
     }
@@ -311,5 +355,19 @@ import Testing
         )
         #expect(normal == Decimal(string: "0.5")!)
         #expect(exercise == Decimal(string: "0.1")!)
+    }
+
+    @Test("SMB disabled cannot restore removed correction through high temp") func smbDisabledCannotRestoreCorrection() {
+        let scaled = DosingEngine.exerciseScaledInsulinRequired(1, scale: 0)
+        #expect(scaled == 0)
+        #expect(
+            DosingEngine.recommendedMicroBolus(
+                insulinRequired: scaled,
+                deliveryRatio: 1,
+                maxBolus: 1,
+                bolusIncrement: Decimal(string: "0.1")!
+            ) == 0
+        )
+        #expect(DosingEngine.requestedHighTempBasalRate(basal: 1, insulinRequired: scaled) == 1)
     }
 }

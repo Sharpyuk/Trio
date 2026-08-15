@@ -70,6 +70,9 @@ extension Adjustments {
                         case .exercise: ExerciseDashboardView(coordinator: resolver.resolve(ExerciseCoordinator.self)!)
                         }
                     }
+                    // Each tab has a substantially different section/row hierarchy. Reusing
+                    // one UICollectionView makes SwiftUI calculate a very large cross-tab diff.
+                    .id(state.selectedTab)
                     .scrollContentBackground(.hidden)
                     .background(appState.trioBackgroundColor(for: colorScheme))
                 }
@@ -203,7 +206,7 @@ extension Adjustments {
             }).background(appState.trioBackgroundColor(for: colorScheme))
         }
 
-        var defaultText: some View {
+        @ViewBuilder var defaultText: some View {
             switch state.selectedTab {
             case .overrides:
                 Section {} header: {
@@ -224,7 +227,7 @@ extension Adjustments {
             }
         }
 
-        var currentActiveAdjustment: some View {
+        @ViewBuilder var currentActiveAdjustment: some View {
             switch state.selectedTab {
             case .overrides:
                 Section {
@@ -281,7 +284,7 @@ extension Adjustments {
             }
         }
 
-        var cancelAdjustmentButton: some View {
+        @ViewBuilder var cancelAdjustmentButton: some View {
             switch state.selectedTab {
             case .overrides:
                 Button(action: {
