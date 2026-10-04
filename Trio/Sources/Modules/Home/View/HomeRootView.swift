@@ -13,6 +13,7 @@ extension Home {
         @Environment(AppState.self) var appState
 
         @State var state = StateModel()
+        @ObservedObject var exerciseModeController: ExerciseModeController
 
         @State var settingsPath = NavigationPath()
         @State var settingsSearchHighlight = SettingsSearchHighlight()
@@ -34,9 +35,18 @@ extension Home {
         @State var pendingCGM: CGMCatalogEntry?
         @State var showSnoozeSheet: Bool = false
         @State var showManualGlucose: Bool = false
+        @State var showExerciseMode: Bool = false
+        @State var showAddActionSheet: Bool = false
+        @State private var selectedAddAction: HomeAddAction = .treatment
         @State var showReleaseNotes: Bool = false
         @State var alarmsSnoozeUntil: Date = .distantPast
         @ObservedObject var releaseNotesService = ReleaseNotesService.shared
+
+        init(resolver: Resolver) {
+            self.resolver = resolver
+            exerciseModeController = resolver.resolve(ExerciseModeController.self)!
+        }
+
         // Pull-down-to-force-loop (see HomeRootView+Refresh.swift)
         @State var pullOffset: CGFloat = 0
         @State var isRefreshArmed = false
@@ -302,6 +312,17 @@ extension Home {
                     state.addManualGlucose(amount)
                 }
             }
+            .sheet(isPresented: $showExerciseMode) {
+                NavigationStack {
+                    ExerciseModeRootView(resolver: resolver, units: state.units)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Done") { showExerciseMode = false }
+                            }
+                        }
+                }
+                .environment(appState)
+            }
             // DEVICE SELECTION (pump + CGM)
             .devicePickers(
                 showPumpSelection: $showPumpSelection,
@@ -461,7 +482,8 @@ extension Home {
                 .padding(.horizontal, 24)
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    state.showModal(for: .treatmentView)
+                    selectedAddAction = .treatment
+                    showAddActionSheet = true
                 }
                 .onLongPressGesture(minimumDuration: 0.5) {
                     guard state.enableQuickPickTreatments else { return }
@@ -480,7 +502,8 @@ extension Home {
                 .accessibilityAddTraits(.isButton)
                 // the tap/long-press gestures are invisible to VoiceOver; expose both
                 .accessibilityAction {
-                    state.showModal(for: .treatmentView)
+                    selectedAddAction = .treatment
+                    showAddActionSheet = true
                 }
                 .accessibilityAction(named: Text("Quick Pick Treatments")) {
                     guard state.enableQuickPickTreatments else { return }
@@ -580,6 +603,16 @@ extension Home {
                     isPresented: $showQuickPickTreatmentsPicker
                 )
             }
+            .sheet(isPresented: $showAddActionSheet, onDismiss: {
+                exerciseModeController.resetSessionDraft()
+            }) {
+                HomeAddActionSheet(
+                    resolver: resolver,
+                    selection: $selectedAddAction,
+                    exerciseController: exerciseModeController,
+                    units: state.units
+                )
+            }
             .alert(
                 String(
                     localized: "No treatment history yet",
@@ -593,6 +626,47 @@ extension Home {
                     localized: "Quick-Pick Treatments learns from your manual boluses and carb entries over time. Once you've logged a few, it will suggest amounts based on what you typically enter at this time of day.",
                     comment: "Alert body explaining that quick-pick treatments history is empty"
                 ))
+            }
+        }
+    }
+}
+
+private enum HomeAddAction: String, CaseIterable, Identifiable {
+    case treatment = "Treatment"
+    case exercise = "Exercise"
+    var id: Self { self }
+}
+
+private struct HomeAddActionSheet: View {
+    let resolver: Resolver
+    @Binding var selection: HomeAddAction
+    @ObservedObject var exerciseController: ExerciseModeController
+    let units: GlucoseUnits
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                Picker("Add", selection: $selection) {
+                    ForEach(HomeAddAction.allCases) { action in
+                        Text(action.rawValue).tag(action)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding()
+                .accessibilityIdentifier("home-add-action-picker")
+
+                switch selection {
+                case .treatment:
+                    Treatments.RootView(resolver: resolver)
+                case .exercise:
+                    ExerciseModeRootView(resolver: resolver, units: units)
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
             }
         }
     }

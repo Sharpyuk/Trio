@@ -430,6 +430,10 @@
 		AD3D2CD42CD01B9EB8F26522 /* PumpConfigDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF65DA88F972B56090AD6AC3 /* PumpConfigDataFlow.swift */; };
 		B015AFF32E600000000D7351 /* AdjustmentManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B015AFF12E600000000D7351 /* AdjustmentManager.swift */; };
 		B015AFF52E600000000D7351 /* AdjustmentManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B015AFF42E600000000D7351 /* AdjustmentManagerTests.swift */; };
+		E2A000012F00000000000001 /* ExerciseMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2A000002F00000000000001 /* ExerciseMode.swift */; };
+		E2A000052F00000000000001 /* ExerciseModeUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2A000042F00000000000001 /* ExerciseModeUI.swift */; };
+		E2A000072F00000000000001 /* ExerciseGlucoseAnnouncementService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2A000062F00000000000001 /* ExerciseGlucoseAnnouncementService.swift */; };
+		E2A000032F00000000000001 /* ExerciseModeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2A000022F00000000000001 /* ExerciseModeTests.swift */; };
 		B015AFE32E500000000D7351 /* BolusSafetyValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B015AFE12E500000000D7351 /* BolusSafetyValidator.swift */; };
 		B015AFE52E500000000D7351 /* BolusSafetyValidatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B015AFE42E500000000D7351 /* BolusSafetyValidatorTests.swift */; };
 		B63C9D934FC54853BC4EF29A /* NightscoutUploadSerializer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10E61A0885164081B57C357C /* NightscoutUploadSerializer.swift */; };
@@ -1514,6 +1518,10 @@
 		AF65DA88F972B56090AD6AC3 /* PumpConfigDataFlow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PumpConfigDataFlow.swift; sourceTree = "<group>"; };
 		B015AFF12E600000000D7351 /* AdjustmentManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdjustmentManager.swift; sourceTree = "<group>"; };
 		B015AFF42E600000000D7351 /* AdjustmentManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdjustmentManagerTests.swift; sourceTree = "<group>"; };
+		E2A000002F00000000000001 /* ExerciseMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseMode.swift; sourceTree = "<group>"; };
+		E2A000042F00000000000001 /* ExerciseModeUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseModeUI.swift; sourceTree = "<group>"; };
+		E2A000062F00000000000001 /* ExerciseGlucoseAnnouncementService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseGlucoseAnnouncementService.swift; sourceTree = "<group>"; };
+		E2A000022F00000000000001 /* ExerciseModeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseModeTests.swift; sourceTree = "<group>"; };
 		B015AFE12E500000000D7351 /* BolusSafetyValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BolusSafetyValidator.swift; sourceTree = "<group>"; };
 		B015AFE42E500000000D7351 /* BolusSafetyValidatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BolusSafetyValidatorTests.swift; sourceTree = "<group>"; };
 		B3919BBB515547118D684CA2 /* SettingsSearchTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SettingsSearchTests.swift; sourceTree = "<group>"; };
@@ -2573,6 +2581,9 @@
 		3811DE9125C9D88200A708ED /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				E2A000002F00000000000001 /* ExerciseMode.swift */,
+				E2A000042F00000000000001 /* ExerciseModeUI.swift */,
+				E2A000062F00000000000001 /* ExerciseGlucoseAnnouncementService.swift */,
 				B015AFF22E600000000D7351 /* Adjustments */,
 				BD1179262F4E22C100F90001 /* Alerts */,
 				3811DE9225C9D88200A708ED /* Appearance */,
@@ -3186,6 +3197,7 @@
 		38FCF3EE25E9028E0078B0D1 /* TrioTests */ = {
 			isa = PBXGroup;
 			children = (
+				E2A000022F00000000000001 /* ExerciseModeTests.swift */,
 				DDDD0FFD2F4E231600F9C645 /* Mocks */,
 				DDDD0FFA2F4E22C000F9C645 /* GlucoseSmoothingTests.swift */,
 				DDDD0FFC2F4E22C000F9C645 /* GlucoseNativeConversionTests.swift */,
@@ -5560,6 +5572,9 @@
 				3811DEEA25CA063400A708ED /* SyncAccess.swift in Sources */,
 				190EBCC829FF13AA00BA767D /* UserInterfaceSettingsStateModel.swift in Sources */,
 				B015AFF32E600000000D7351 /* AdjustmentManager.swift in Sources */,
+				E2A000012F00000000000001 /* ExerciseMode.swift in Sources */,
+				E2A000052F00000000000001 /* ExerciseModeUI.swift in Sources */,
+				E2A000072F00000000000001 /* ExerciseGlucoseAnnouncementService.swift in Sources */,
 				B015AFE32E500000000D7351 /* BolusSafetyValidator.swift in Sources */,
 				DDF847EA2C5DABAC0049BB3B /* WatchConfigGarminView.swift in Sources */,
 				38BF021F25E7F0DE00579895 /* DeviceDataManager.swift in Sources */,
@@ -6039,6 +6054,7 @@
 				BD8FC05E2D6618CE00B95AED /* BolusCalculatorTests.swift in Sources */,
 				41740E936552456AAC0EDAC3 /* SettingsSearchTests.swift in Sources */,
 				B015AFF52E600000000D7351 /* AdjustmentManagerTests.swift in Sources */,
+				E2A000032F00000000000001 /* ExerciseModeTests.swift in Sources */,
 				41740E936552456AAC0EDFC3 /* AlgorithmSuggestedBolusTests.swift in Sources */,
 				41740E936552456AAC0EDEC3 /* DosingModeClampTests.swift in Sources */,
 				41740E936552456AAC0EDDC3 /* LoopIndicatorTests.swift in Sources */,

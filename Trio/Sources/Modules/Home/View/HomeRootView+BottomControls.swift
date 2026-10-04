@@ -61,6 +61,7 @@ extension Home.RootView {
     }
 
     var adjustmentTint: Color? {
+        if let phase = exerciseModeController.state.phase { return ExerciseModeUI.color(for: phase) }
         if overrideString != nil { return Color.purple }
         if tempTargetString != nil { return Color.loopGreen }
         return nil
@@ -318,6 +319,65 @@ extension Home.RootView {
         }
     }
 
+    @ViewBuilder func activeExerciseAdjustmentView(_ active: ExerciseModeActiveState) -> some View {
+        TimelineView(.periodic(from: .now, by: 1)) { timeline in
+            HStack {
+                adjustmentIcon("figure.run", tint: ExerciseModeUI.color(for: active.phase))
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("\(ExerciseModeUI.title(for: active.phase)) — \(active.configuration.presetName ?? "Exercise")")
+                        .font(.subheadline).fontWeight(.semibold)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Text(exerciseStatus(active, at: timeline.date))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                        .lineLimit(1)
+
+                    if overrideString != nil || tempTargetString != nil {
+                        Text(concurrentAdjustmentSummary)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+
+                Image(systemName: "chevron.right")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.trailing, 8)
+            }
+        }
+    }
+
+    private var concurrentAdjustmentSummary: String {
+        switch (overrideString != nil, tempTargetString != nil) {
+        case (true, true): "Also active: Override and Temp Target"
+        case (true, false): "Also active: Override"
+        case (false, true): "Also active: Temp Target"
+        case (false, false): ""
+        }
+    }
+
+    private func exerciseStatus(_ active: ExerciseModeActiveState, at now: Date) -> String {
+        let percentage = "\(active.configuration.insulinPercentage.formatted())%"
+        if active.phase == .preExercise, let exerciseAt = active.scheduledExerciseAt {
+            return "\(percentage) • Exercise \(exerciseAt.formatted(date: .omitted, time: .shortened)) • \(exerciseDuration(from: now, to: exerciseAt)) remaining"
+        }
+        if active.phase == .postExercise, let minutes = active.configuration.durationMinutes {
+            let end = active.phaseStartedAt.addingTimeInterval(NSDecimalNumber(decimal: minutes).doubleValue * 60)
+            return "\(percentage) • \(exerciseDuration(from: now, to: end)) remaining"
+        }
+        return "\(percentage) • \(exerciseDuration(from: active.phaseStartedAt, to: now)) elapsed"
+    }
+
+    private func exerciseDuration(from start: Date, to end: Date) -> String {
+        let seconds = max(0, Int(end.timeIntervalSince(start)))
+        if seconds >= 3600 { return String(format: "%02d:%02d", seconds / 3600, seconds % 3600 / 60) }
+        return "\(seconds / 60) min"
+    }
+
     // same track pattern as BolusProgressBar, slightly slimmer
     @ViewBuilder func remainingBar(_ fraction: Double?, tint: Color) -> some View {
         GeometryReader { barGeo in
@@ -333,8 +393,9 @@ extension Home.RootView {
 
     @ViewBuilder func adjustmentView() -> some View {
         let tint = adjustmentTint
+        let hasActiveExercise = exerciseModeController.activeState != nil
         // concurrent override + temp target: halved tint, one remaining bar per half
-        let isConcurrent = overrideString != nil && tempTargetString != nil
+        let isConcurrent = !hasActiveExercise && overrideString != nil && tempTargetString != nil
 
         ZStack {
             if isConcurrent {
@@ -346,7 +407,9 @@ extension Home.RootView {
                 .clipShape(GlassChrome.panelShape)
             }
             HStack {
-                if let overrideString = overrideString, let tempTargetString = tempTargetString {
+                if let active = exerciseModeController.activeState {
+                    activeExerciseAdjustmentView(active)
+                } else if let overrideString = overrideString, let tempTargetString = tempTargetString {
                     // content halves match the tint halves so icons clear the seam
                     HStack(spacing: 0) {
                         HStack {
@@ -444,7 +507,7 @@ extension Home.RootView {
                         remainingBar(overrideRemainingFraction, tint: .purple)
                         remainingBar(tempTargetRemainingFraction, tint: .loopGreen)
                     }
-                } else if let tint = tint {
+                } else if !hasActiveExercise, let tint = tint {
                     remainingBar(overrideRemainingFraction ?? tempTargetRemainingFraction, tint: tint)
                 }
             }
@@ -454,11 +517,21 @@ extension Home.RootView {
         // whole panel navigates; the cancel buttons' own gestures take precedence
         .contentShape(Rectangle())
         .onTapGesture {
-            selectedTab = 2
+            if exerciseModeController.activeState != nil {
+                showExerciseMode = true
+            } else {
+                selectedTab = 2
+            }
         }
-        .accessibilityHint(Text(String(localized: "Opens adjustments", comment: "Accessibility hint")))
+        .accessibilityHint(Text(
+            exerciseModeController.activeState == nil
+                ? String(localized: "Opens adjustments", comment: "Accessibility hint")
+                : String(localized: "Opens active Exercise controls", comment: "Accessibility hint")
+        ))
         .accessibilityAddTraits(.isButton)
-        .accessibilityAction { selectedTab = 2 }
+        .accessibilityAction {
+            if exerciseModeController.activeState != nil { showExerciseMode = true } else { selectedTab = 2 }
+        }
         .padding(.horizontal, 10)
     }
 

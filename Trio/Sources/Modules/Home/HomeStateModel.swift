@@ -111,6 +111,7 @@ extension Home {
         var overrideRunStored: [OverrideRunStored] = []
         var tempTargetStored: [TempTargetStored] = []
         var tempTargetRunStored: [TempTargetRunStored] = []
+        var exercisePhases: [ExercisePhaseStored] = []
         var isOverrideCancelled: Bool = false
         var preprocessedData: [(id: UUID, forecast: Forecast, forecastValue: ForecastValue)] = []
         var pumpStatusHighlightMessage: String?
@@ -369,6 +370,21 @@ extension Home {
             return controller
         }()
 
+        @ObservationIgnored let exercisePhaseControllerDelegate = FetchedResultsControllerDelegate()
+        @ObservationIgnored private(set) lazy var exercisePhaseController: NSFetchedResultsController<ExercisePhaseStored> = {
+            let request = NSFetchRequest<ExercisePhaseStored>(entityName: "ExercisePhaseStored")
+            request.sortDescriptors = [NSSortDescriptor(keyPath: \ExercisePhaseStored.startDate, ascending: true)]
+            request.predicate = exercisePhasePredicate()
+            let controller = NSFetchedResultsController(
+                fetchRequest: request,
+                managedObjectContext: viewContext,
+                sectionNameKeyPath: nil,
+                cacheName: nil
+            )
+            controller.delegate = exercisePhaseControllerDelegate
+            return controller
+        }()
+
         @ObservationIgnored let batteryControllerDelegate = FetchedResultsControllerDelegate()
         @ObservationIgnored private(set) lazy var batteryController: NSFetchedResultsController<OpenAPS_Battery> = {
             let request = NSFetchRequest<OpenAPS_Battery>(entityName: "OpenAPS_Battery")
@@ -432,6 +448,7 @@ extension Home {
             reanchor(tempTargetRunController, with: NSPredicate.predicateForStartDate(since: chartHistoryStartDate)) {
                 self.updateTempTargetRunsFromController()
             }
+            reanchor(exercisePhaseController, with: exercisePhasePredicate()) { self.updateExercisePhasesFromController() }
             reanchor(batteryController, with: NSPredicate.predicateFor30MinAgo) { self.updateBatteryFromController() }
         }
 
@@ -489,6 +506,7 @@ extension Home {
                 await self.setupOverrideRunController()
                 await self.setupTempTargetController()
                 await self.setupTempTargetRunController()
+                await self.setupExercisePhaseController()
                 await self.setupBatteryController()
                 await self.setupTDDController()
 

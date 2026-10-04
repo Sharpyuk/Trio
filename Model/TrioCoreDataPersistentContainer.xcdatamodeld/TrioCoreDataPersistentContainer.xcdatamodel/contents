@@ -55,6 +55,57 @@
             <fetchIndexElement property="date" type="Binary" order="ascending"/>
         </fetchIndex>
     </entity>
+    <entity name="ExercisePhaseStored" representedClassName="ExercisePhaseStored" syncable="YES" codeGenerationType="class">
+        <attribute name="announcementEnabled" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="announcementIntervalMinutes" optional="YES" attributeType="Decimal" defaultValueString="2"/>
+        <attribute name="basalPercentage" optional="YES" attributeType="Decimal" defaultValueString="100"/>
+        <attribute name="configurationSnapshot" optional="YES" attributeType="Binary"/>
+        <attribute name="correctionPercentage" optional="YES" attributeType="Decimal" defaultValueString="100"/>
+        <attribute name="durationMinutes" optional="YES" attributeType="Decimal"/>
+        <attribute name="endDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="insulinPercentage" optional="YES" attributeType="Decimal" defaultValueString="100"/>
+        <attribute name="isActive" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="kind" optional="YES" attributeType="String"/>
+        <attribute name="segmentIndex" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="sensitivityPercentage" optional="YES" attributeType="Decimal" defaultValueString="100"/>
+        <attribute name="smbEnabled" attributeType="Boolean" defaultValueString="YES" usesScalarValueType="YES"/>
+        <attribute name="startDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="targetGlucose" optional="YES" attributeType="Decimal" defaultValueString="100"/>
+        <relationship name="session" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="ExerciseSessionStored" inverseName="phases" inverseEntity="ExerciseSessionStored"/>
+        <fetchIndex name="byStartDate"><fetchIndexElement property="startDate" type="Binary" order="ascending"/></fetchIndex>
+        <fetchIndex name="byActive"><fetchIndexElement property="isActive" type="Binary" order="ascending"/></fetchIndex>
+    </entity>
+    <entity name="ExerciseSessionStored" representedClassName="ExerciseSessionStored" syncable="YES" codeGenerationType="class">
+        <attribute name="completedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="exerciseEndDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="exerciseStartDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="plannedExerciseConfiguration" optional="YES" attributeType="Binary"/>
+        <attribute name="presetID" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="presetName" optional="YES" attributeType="String"/>
+        <attribute name="postPlan" optional="YES" attributeType="Binary"/>
+        <attribute name="scheduledExerciseAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="status" optional="YES" attributeType="String"/>
+        <relationship name="phases" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ExercisePhaseStored" inverseName="session" inverseEntity="ExercisePhaseStored"/>
+        <relationship name="transitions" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ExerciseTransitionStored" inverseName="session" inverseEntity="ExerciseTransitionStored"/>
+        <fetchIndex name="byCreatedAt"><fetchIndexElement property="createdAt" type="Binary" order="descending"/></fetchIndex>
+        <fetchIndex name="byStatus"><fetchIndexElement property="status" type="Binary" order="ascending"/></fetchIndex>
+        <uniquenessConstraints><uniquenessConstraint><constraint value="id"/></uniquenessConstraint></uniquenessConstraints>
+    </entity>
+    <entity name="ExerciseTransitionStored" representedClassName="ExerciseTransitionStored" syncable="YES" codeGenerationType="class">
+        <attribute name="committedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="errorMessage" optional="YES" attributeType="String"/>
+        <attribute name="fromPhase" optional="YES" attributeType="String"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="requestedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="source" optional="YES" attributeType="String"/>
+        <attribute name="succeeded" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="toPhase" optional="YES" attributeType="String"/>
+        <relationship name="session" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="ExerciseSessionStored" inverseName="transitions" inverseEntity="ExerciseSessionStored"/>
+        <fetchIndex name="byRequestedAt"><fetchIndexElement property="requestedAt" type="Binary" order="ascending"/></fetchIndex>
+    </entity>
     <entity name="Forecast" representedClassName="Forecast" syncable="YES">
         <attribute name="date" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>

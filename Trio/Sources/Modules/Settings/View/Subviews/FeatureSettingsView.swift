@@ -24,6 +24,7 @@ struct FeatureSettingsView: BaseView {
                     Text("Treatments").navigationLink(to: .treatmentsSettings, from: self)
                     Text("Shortcuts").navigationLink(to: .shortcutsConfig, from: self)
                     Text("Remote Control").navigationLink(to: .remoteControlConfig, from: self)
+                    Text("Exercise Mode").navigationLink(to: .exerciseMode, from: self)
                 }
             )
             .listRowBackground(Color.chart)

@@ -8,6 +8,7 @@ extension Adjustments {
         @State var state = StateModel()
         @State var isEditing = false
         @State var showOverrideCreationSheet = false
+        @State var showExerciseMode = false
         @State var showTempTargetCreationSheet = false
         @State var showingDetail = false
         @State var showOverrideCheckmark: Bool = false
@@ -93,14 +94,23 @@ extension Adjustments {
                     ToolbarItem(placement: .topBarTrailing) {
                         switch state.selectedTab {
                         case .overrides:
-                            Button(action: {
-                                showOverrideCreationSheet = true
-                            }, label: {
+                            Menu {
+                                Button {
+                                    showExerciseMode = true
+                                } label: {
+                                    Label("Exercise", systemImage: "figure.run")
+                                }
+                                Button {
+                                    showOverrideCreationSheet = true
+                                } label: {
+                                    Label("Override", systemImage: "plus")
+                                }
+                            } label: {
                                 HStack {
-                                    Text("Add Override")
+                                    Text("Add")
                                     Image(systemName: "plus")
                                 }
-                            })
+                            }
                         case .tempTargets:
                             Button(action: {
                                 showTempTargetCreationSheet = true
@@ -131,6 +141,16 @@ extension Adjustments {
                     }
                 }) {
                     AddOverrideForm(state: state)
+                }
+                .sheet(isPresented: $showExerciseMode) {
+                    NavigationStack {
+                        ExerciseModeRootView(resolver: resolver)
+                            .toolbar {
+                                ToolbarItem(placement: .topBarTrailing) {
+                                    Button("Done") { showExerciseMode = false }
+                                }
+                            }
+                    }
                 }
                 .sheet(isPresented: $showTempTargetCreationSheet, onDismiss: {
                     Task {

@@ -23,6 +23,7 @@ enum DeterminationGenerator {
         glucose: [BloodGlucose],
         microBolusAllowed: Bool,
         trioCustomOrefVariables: TrioCustomOrefVariables,
+        exerciseDosingContext: ExerciseDosingContext = .inactive,
         currentTime: Date
     ) throws -> Determination? {
         let glucoseStatus = try Self.getGlucoseStatus(glucoseReadings: glucose)
@@ -38,6 +39,7 @@ enum DeterminationGenerator {
             glucoseStatus: glucoseStatus,
             microBolusAllowed: microBolusAllowed,
             trioCustomOrefVariables: trioCustomOrefVariables,
+            exerciseDosingContext: exerciseDosingContext,
             currentTime: currentTime
         )
     }
@@ -56,6 +58,7 @@ enum DeterminationGenerator {
         glucoseStatus: GlucoseStatus,
         microBolusAllowed: Bool,
         trioCustomOrefVariables: TrioCustomOrefVariables,
+        exerciseDosingContext: ExerciseDosingContext = .inactive,
         currentTime: Date
     ) throws -> Determination? {
         var autosensData = autosensData
@@ -124,6 +127,7 @@ enum DeterminationGenerator {
             profile: profile,
             preferences: preferences,
             currentGlucose: currentGlucose,
+            effectiveTarget: exerciseDosingContext.targetGlucose,
             trioCustomOrefVariables: trioCustomOrefVariables
         )
 
@@ -170,14 +174,15 @@ enum DeterminationGenerator {
             )
         }
 
-        // this is the `sens` variable in JS, it's the adjusted sensitivity
-        let adjustedSensitivity = computeAdjustedSensitivity(
+        // Resolve normal Trio sensitivity first, then apply the explicit Exercise factor once.
+        let normalAdjustedSensitivity = computeAdjustedSensitivity(
             sensitivity: profile.sens ?? profile.sensitivityFor(time: currentTime),
             sensitivityRatio: sensitivityRatio,
             trioCustomOrefVariables: trioCustomOrefVariables
         )
+        let adjustedSensitivity = exerciseDosingContext.adjustedSensitivity(normalAdjustedSensitivity)
 
-        let (adjustedGlucoseTargets, threshold) = adjustGlucoseTargets(
+        let (normalAdjustedGlucoseTargets, normalThreshold) = adjustGlucoseTargets(
             profile: profile,
             autosens: autosensData,
             trioCustomOrefVariables: trioCustomOrefVariables,
@@ -187,6 +192,22 @@ enum DeterminationGenerator {
             maxGlucose: profile.maxBg ?? 180,
             noise: 1
         )
+        let adjustedGlucoseTargets: AdjustedGlucoseTargets
+        let threshold: Decimal
+        if let exerciseTarget = exerciseDosingContext.targetGlucose {
+            adjustedGlucoseTargets = AdjustedGlucoseTargets(
+                minGlucose: exerciseTarget,
+                maxGlucose: exerciseTarget,
+                targetGlucose: exerciseTarget
+            )
+            threshold = min(max(profile.thresholdSetting, exerciseTarget - 0.5 * (exerciseTarget - 40), 60), 120)
+        } else {
+            adjustedGlucoseTargets = normalAdjustedGlucoseTargets
+            threshold = normalThreshold
+        }
+
+        let normalBasal = basal
+        basal = exerciseDosingContext.adjustedBasal(normalBasal, profile: profile)
 
         let glucoseImpactSeries = buildGlucoseImpactSeries(iobDataSeries: iobData, sensitivity: adjustedSensitivity)
         let glucoseImpactSeriesWithZeroTemp = buildGlucoseImpactSeries(
@@ -345,7 +366,7 @@ enum DeterminationGenerator {
             clock: currentTime
         )
 
-        let smbIsEnabled = smbDecision.isEnabled
+        let smbIsEnabled = smbDecision.isEnabled && (!exerciseDosingContext.isActive || exerciseDosingContext.smbEnabled)
         var reason = dosingInputs.reason
         if let smbReason = smbDecision.reason {
             reason += smbReason
@@ -511,7 +532,7 @@ enum DeterminationGenerator {
         // MARK: - Aggressive dosing logic (SMB, High Temps)
 
         // Calculate Insulin Required
-        let (insulinRequired, insulinReqDetermination) = DosingEngine.calculateInsulinRequired(
+        let (rawInsulinRequired, insulinReqDetermination) = DosingEngine.calculateInsulinRequired(
             minForecastGlucose: forecastResult.minForecastedGlucose,
             eventualGlucose: forecastResult.eventualGlucose,
             targetGlucose: adjustedGlucoseTargets.targetGlucose,
@@ -521,6 +542,28 @@ enum DeterminationGenerator {
             determination: determination
         )
         determination = insulinReqDetermination
+        let insulinRequired = exerciseDosingContext.allowedCorrection(rawInsulinRequired)
+        determination.insulinReq = insulinRequired
+
+        if exerciseDosingContext.isActive {
+            let trace = ExerciseDosingTrace(
+                context: exerciseDosingContext,
+                normalTarget: normalAdjustedGlucoseTargets.targetGlucose,
+                effectiveTarget: adjustedGlucoseTargets.targetGlucose,
+                normalAdjustedSensitivity: normalAdjustedSensitivity,
+                effectiveSensitivity: adjustedSensitivity,
+                normalBasal: normalBasal,
+                effectiveBasal: basal,
+                rawInsulinRequired: rawInsulinRequired,
+                allowedCorrection: insulinRequired,
+                iob: currentIob,
+                cob: mealData.mealCOB,
+                minForecastGlucose: forecastResult.minForecastedGlucose,
+                eventualGlucose: forecastResult.eventualGlucose
+            )
+            debug(.openAPS, "Exercise dosing: \(trace)")
+            determination.reason += trace.reasonFragment
+        }
 
         // SMB Delivery
         let (shouldSetTempBasalForSMB, smbDetermination) = try DosingEngine.determineSMBDelivery(

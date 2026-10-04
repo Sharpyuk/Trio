@@ -190,7 +190,10 @@ enum ParityScenarios {
 
     /// Mirrors the production Swift path: OpenAPSSwift.makeProfile → autosense
     /// (8h/24h, min ratio) → meal → iob (deduped suspend/resume) → determineBasal.
-    static func runPipeline(_ scenario: ParityScenario) throws -> ParityPipelineOutputs {
+    static func runPipeline(
+        _ scenario: ParityScenario,
+        exerciseDosingContext: ExerciseDosingContext = .inactive
+    ) throws -> ParityPipelineOutputs {
         var profile = try ProfileGenerator.generate(
             pumpSettings: scenario.pumpSettings,
             bgTargets: scenario.bgTargets,
@@ -259,6 +262,7 @@ enum ParityScenarios {
             glucose: scenario.glucose,
             microBolusAllowed: true,
             trioCustomOrefVariables: scenario.orefVariables,
+            exerciseDosingContext: exerciseDosingContext,
             currentTime: scenario.clock
         )
 

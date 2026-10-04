@@ -37,6 +37,7 @@ enum Screen: Identifiable, Hashable {
     case therapySettings
     case algorithmSettings
     case featureSettings
+    case exerciseMode
     case notificationSettings
     case liveActivitySettings
     case liveActivityBottomRowSettings
@@ -143,6 +144,8 @@ extension Screen {
             AlgorithmSettings(resolver: resolver, state: Settings.StateModel())
         case .featureSettings:
             FeatureSettingsView(resolver: resolver, state: Settings.StateModel())
+        case .exerciseMode:
+            ExerciseModeSettingsView(resolver: resolver)
         case .notificationSettings:
             NotificationsView(resolver: resolver, state: Settings.StateModel())
         case .liveActivitySettings:

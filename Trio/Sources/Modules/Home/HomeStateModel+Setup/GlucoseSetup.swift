@@ -2,6 +2,26 @@ import CoreData
 import Foundation
 
 extension Home.StateModel {
+    func exercisePhasePredicate() -> NSPredicate {
+        NSPredicate(format: "isActive == YES OR endDate == nil OR endDate >= %@", chartHistoryStartDate as NSDate)
+    }
+
+    @MainActor func setupExercisePhaseController() {
+        exercisePhaseControllerDelegate.onContentChange = { [weak self] in
+            Task { @MainActor in self?.updateExercisePhasesFromController() }
+        }
+        do {
+            try exercisePhaseController.performFetch()
+            updateExercisePhasesFromController()
+        } catch {
+            debug(.default, "\(DebuggingIdentifiers.failed) Failed to fetch Exercise phases: \(error)")
+        }
+    }
+
+    @MainActor func updateExercisePhasesFromController() {
+        exercisePhases = exercisePhaseController.fetchedObjects ?? []
+    }
+
     @MainActor func setupGlucoseController() {
         glucoseControllerDelegate.onContentChange = { [weak self] in
             Task { @MainActor in

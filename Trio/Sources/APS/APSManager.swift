@@ -134,6 +134,7 @@ final class BaseAPSManager: APSManager, Injectable {
     @Injected() private var tddStorage: TDDStorage!
     @Injected() private var broadcaster: Broadcaster!
     @Injected() private var trioAlertManager: TrioAlertManager!
+    @Injected() private var exerciseModeManager: ExerciseModeManager!
     @Persisted(key: "lastLoopStartDate") private var lastLoopStartDate: Date = .distantPast
     private var lastDosingMode: DosingMode?
     @Persisted(key: "lastLoopDate") var lastLoopDate: Date = .distantPast {
@@ -493,6 +494,10 @@ final class BaseAPSManager: APSManager, Injectable {
     func determineBasal() async throws {
         debug(.apsManager, "Start determine basal")
 
+        // One immutable read for the entire determination. Phase transitions that happen
+        // after this point take effect on the next loop, never midway through this one.
+        let exerciseDosingContext = ExerciseDosingContext(state: try await exerciseModeManager.currentState())
+
         try await calculateAndStoreTDD()
 
         var invalidGlucoseError: String?
@@ -549,7 +554,8 @@ final class BaseAPSManager: APSManager, Injectable {
                 currentTemp: currentTemp,
                 supportedBasalRates: supportedBasalRates,
                 shouldSmoothGlucose: settingsManager.settings.smoothGlucose,
-                clock: now
+                clock: now,
+                exerciseDosingContext: exerciseDosingContext
             )
             iobFileDidUpdate.send(())
 
@@ -602,6 +608,7 @@ final class BaseAPSManager: APSManager, Injectable {
         simulatedCarbsDate: Date? = nil
     ) async -> Determination? {
         do {
+            let exerciseDosingContext = ExerciseDosingContext(state: try await exerciseModeManager.currentState())
             let temp = try await fetchCurrentTempBasal(date: Date.now)
             return try await openAPS.determineBasal(
                 for: settingsManager.settings.dosingMode,
@@ -612,7 +619,8 @@ final class BaseAPSManager: APSManager, Injectable {
                 simulatedCarbsAmount: simulatedCarbsAmount,
                 simulatedBolusAmount: simulatedBolusAmount,
                 simulatedCarbsDate: simulatedCarbsDate,
-                simulation: true
+                simulation: true,
+                exerciseDosingContext: exerciseDosingContext
             )
         } catch {
             debugPrint(

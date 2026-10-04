@@ -8505,6 +8505,16 @@
         }
       }
     },
+    "%@ — %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ — %2$@"
+          }
+        }
+      }
+    },
     "%@ (%@-%@)" : {
       "localizations" : {
         "bg" : {
@@ -11046,6 +11056,16 @@
         }
       }
     },
+    "%@: %@ %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@: %2$@ %3$@"
+          }
+        }
+      }
+    },
     "%@?" : {
       "localizations" : {
         "bg" : {
@@ -11438,6 +11458,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@/U"
+          }
+        }
+      }
+    },
+    "%@%% • %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@%% • %2$@"
           }
         }
       }
@@ -38327,6 +38357,9 @@
         }
       }
     },
+    "Adjust This Session" : {
+
+    },
     "Adjusting this value not only can adjust how quickly your sensitivity will respond to changing glucose readings, but also at what glucose readings you reach your Autosens Max/Min limits." : {
       "localizations" : {
         "bg" : {
@@ -50854,6 +50887,9 @@
           }
         }
       }
+    },
+    "Apply to This Session" : {
+
     },
     "Applying ${bolusQuantity} U" : {
       "localizations" : {
@@ -71418,6 +71454,9 @@
         }
       }
     },
+    "CANCEL SCHEDULE" : {
+
+    },
     "Cancel Temp Target" : {
       "comment" : "Alert",
       "extractionState" : "manual",
@@ -79713,6 +79752,9 @@
           }
         }
       }
+    },
+    "Choose for this session" : {
+
     },
     "Choose from multiple layout options using the Layout Picker in the 'Style' section." : {
       "localizations" : {
@@ -89319,6 +89361,9 @@
         }
       }
     },
+    "Controls" : {
+
+    },
     "Copied" : {
       "localizations" : {
         "bg" : {
@@ -91285,6 +91330,9 @@
           }
         }
       }
+    },
+    "Create Preset" : {
+
     },
     "Critical" : {
       "comment" : "Name of the critical alarm sound.",
@@ -118311,6 +118359,9 @@
         }
       }
     },
+    "Duplicate" : {
+
+    },
     "Duration" : {
       "comment" : "Duration of target temp or temp basalMedian loop interval",
       "localizations" : {
@@ -121456,6 +121507,9 @@
           }
         }
       }
+    },
+    "Edit Selected Preset" : {
+
     },
     "Edit settings json" : {
       "extractionState" : "manual",
@@ -130687,6 +130741,9 @@
         }
       }
     },
+    "ENTER RECOVERY" : {
+
+    },
     "Enter Shared Secret" : {
       "localizations" : {
         "bg" : {
@@ -134127,6 +134184,19 @@
         }
       }
     },
+    "Exercise" : {
+
+    },
+    "Exercise %@%% • %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Exercise %1$@%% • %2$@"
+          }
+        }
+      }
+    },
     "Exercise Mode" : {
       "comment" : "Headline \"Exercise Mode\"",
       "extractionState" : "manual",
@@ -134264,6 +134334,15 @@
           }
         }
       }
+    },
+    "Exercise Preset" : {
+
+    },
+    "Exercise starts" : {
+
+    },
+    "Exercise target" : {
+
     },
     "Experimental" : {
       "comment" : "New Experimental feature",
@@ -150091,6 +150170,9 @@
           }
         }
       }
+    },
+    "Glucose announcements" : {
+
     },
     "Glucose App Badge" : {
       "localizations" : {
@@ -192144,6 +192226,9 @@
         }
       }
     },
+    "Manage Presets" : {
+
+    },
     "Manager Identifier" : {
       "comment" : "The title of the parameter for the manager identifier in the StopCriticalAlertIntent.",
       "localizations" : {
@@ -224685,6 +224770,9 @@
         }
       }
     },
+    "Open Exercise Mode" : {
+
+    },
     "Open failed" : {
       "localizations" : {
         "bg" : {
@@ -226670,6 +226758,9 @@
           }
         }
       }
+    },
+    "Opens active Exercise controls" : {
+      "comment" : "Accessibility hint"
     },
     "Opens adjustments" : {
       "comment" : "Accessibility hint",
@@ -234994,6 +235085,12 @@
         }
       }
     },
+    "Phase end" : {
+
+    },
+    "Phase start" : {
+
+    },
     "Phone NFC required!" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -235650,6 +235747,12 @@
           }
         }
       }
+    },
+    "Planned exercise" : {
+
+    },
+    "Planned exercise start" : {
+
     },
     "Play preview" : {
       "comment" : "Accessibility: play tone preview",
@@ -237640,6 +237743,22 @@
         }
       }
     },
+    "POST" : {
+
+    },
+    "PRE %@ • Exercise %@%% • %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "PRE %1$@ • Exercise %2$@%% • %3$@"
+          }
+        }
+      }
+    },
+    "PRE starts" : {
+
+    },
     "Prediction Type" : {
       "localizations" : {
         "bg" : {
@@ -238428,6 +238547,9 @@
         }
       }
     },
+    "Preset name" : {
+
+    },
     "Presets" : {
       "localizations" : {
         "bg" : {
@@ -238947,6 +239069,9 @@
           }
         }
       }
+    },
+    "Active Exercise phase settings affect insulin dosing" : {
+
     },
     "Previous field" : {
       "localizations" : {
@@ -257870,6 +257995,9 @@
         }
       }
     },
+    "Save Preset" : {
+
+    },
     "Saved Food" : {
       "comment" : "Saved Food Presets",
       "localizations" : {
@@ -258660,6 +258788,9 @@
         }
       }
     },
+    "SCHEDULE" : {
+
+    },
     "Schedule " : {
       "extractionState" : "manual",
       "localizations" : {
@@ -258933,6 +259064,9 @@
           }
         }
       }
+    },
+    "Scheduled %@" : {
+
     },
     "Scheduled Basal Rate" : {
       "localizations" : {
@@ -259327,6 +259461,19 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "排程臨時目標"
+          }
+        }
+      }
+    },
+    "Scheduled: Exercise %@" : {
+
+    },
+    "Scheduled: PRE %@ → Exercise %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Scheduled: PRE %1$@ → Exercise %2$@"
           }
         }
       }
@@ -265431,6 +265578,9 @@
           }
         }
       }
+    },
+    "Set as Default" : {
+
     },
     "Set boundaries for insulin delivery and carb entries to help Trio keep you safe." : {
       "localizations" : {
@@ -273187,6 +273337,9 @@
         }
       }
     },
+    "SKIP RECOVERY / END SESSION" : {
+
+    },
     "Slide to Confirm" : {
       "comment" : "Slide to confirm label when nothing is picked yet",
       "localizations" : {
@@ -275038,6 +275191,9 @@
         }
       }
     },
+    "SMB enabled" : {
+
+    },
     "SMB Interval" : {
       "comment" : "SMB Interval",
       "localizations" : {
@@ -275305,6 +275461,12 @@
           }
         }
       }
+    },
+    "SMB OFF" : {
+
+    },
+    "SMB ON" : {
+
     },
     "SMB Ratio" : {
       "localizations" : {
@@ -279886,6 +280048,9 @@
         }
       }
     },
+    "Start or schedule a session" : {
+
+    },
     "Start Override" : {
       "localizations" : {
         "bg" : {
@@ -283185,6 +283350,12 @@
           }
         }
       }
+    },
+    "Stop Exercise" : {
+
+    },
+    "STOP EXERCISE" : {
+
     },
     "Stop override" : {
       "localizations" : {
@@ -291055,6 +291226,9 @@
           }
         }
       }
+    },
+    "Target: %@" : {
+
     },
     "TargetGlucose - 0.5 × (TargetGlucose - 40)" : {
       "localizations" : {
@@ -331085,6 +331259,9 @@
         }
       }
     },
+    "Update Source Preset" : {
+
+    },
     "Updated" : {
       "localizations" : {
         "bg" : {
@@ -334773,6 +334950,12 @@
           }
         }
       }
+    },
+    "Use PRE" : {
+
+    },
+    "Use recovery" : {
+
     },
     "Use Sigmoid Function" : {
       "comment" : "Headline Use Sigmoid Function",

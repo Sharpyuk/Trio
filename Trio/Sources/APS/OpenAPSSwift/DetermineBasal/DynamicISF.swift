@@ -31,12 +31,13 @@ enum DynamicISF {
         profile: Profile,
         preferences: Preferences,
         currentGlucose: Decimal,
+        effectiveTarget: Decimal? = nil,
         trioCustomOrefVariables: TrioCustomOrefVariables
     ) -> DynamicISFResult? {
         let tdd = trioCustomOrefVariables.tdd(profile: profile)
 
         guard preferences.useNewFormula, tdd > 0, var sensitivity = profile.sens,
-              let profileTarget = profile.profileTarget(trioCustomOrefVariables: trioCustomOrefVariables)
+              let profileTarget = effectiveTarget ?? profile.profileTarget(trioCustomOrefVariables: trioCustomOrefVariables)
         else {
             return nil
         }

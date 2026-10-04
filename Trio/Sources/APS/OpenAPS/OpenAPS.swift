@@ -241,7 +241,8 @@ final class OpenAPS {
         simulatedCarbsAmount: Decimal? = nil,
         simulatedBolusAmount: Decimal? = nil,
         simulatedCarbsDate: Date? = nil,
-        simulation: Bool = false
+        simulation: Bool = false,
+        exerciseDosingContext: ExerciseDosingContext = .inactive
     ) async throws -> Determination? {
         debug(.openAPS, "Start determineBasal")
 
@@ -344,7 +345,8 @@ final class OpenAPS {
             microBolusAllowed: true,
             reservoir: reservoir,
             preferences: preferences,
-            trioCustomOrefVariables: trioCustomOrefVariables
+            trioCustomOrefVariables: trioCustomOrefVariables,
+            exerciseDosingContext: exerciseDosingContext
         )
 
         debug(.openAPS, "\(simulation ? "[SIMULATION]" : "") OREF DETERMINATION: \(String(describing: orefDetermination))")
@@ -696,7 +698,8 @@ final class OpenAPS {
         microBolusAllowed: Bool,
         reservoir: Decimal,
         preferences: Preferences,
-        trioCustomOrefVariables: TrioCustomOrefVariables
+        trioCustomOrefVariables: TrioCustomOrefVariables,
+        exerciseDosingContext: ExerciseDosingContext
     ) throws -> Determination? {
         let clock = Date()
 
@@ -715,6 +718,7 @@ final class OpenAPS {
             glucose: glucose,
             microBolusAllowed: microBolusAllowed,
             trioCustomOrefVariables: trioCustomOrefVariables,
+            exerciseDosingContext: exerciseDosingContext,
             currentTime: clock
         )
     }

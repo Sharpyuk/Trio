@@ -919,6 +919,11 @@ extension MainChartCanvas {
         let fpus = windowedFPUs
 
         return Chart {
+            ExercisePhaseRegionsView(
+                phases: state.exercisePhases,
+                now: state.timerDate,
+                units: state.units
+            )
             drawCurrentTimeMarker()
             drawThresholdLines()
 
@@ -989,6 +994,50 @@ extension MainChartCanvas {
             "zt": Color.zt,
             "cob": Color.orange
         ])
+    }
+}
+
+/// Persisted Exercise phases rendered in the chart's native Date coordinate system.
+/// These marks pan and zoom with glucose because they share this Chart's x scale.
+struct ExercisePhaseRegionsView: ChartContent {
+    let phases: [ExercisePhaseStored]
+    let now: Date
+    let units: GlucoseUnits
+
+    var body: some ChartContent {
+        ForEach(phases, id: \.objectID) { phase in
+            if let start = phase.startDate {
+                let end = phase.endDate ?? now
+                RuleMark(
+                    xStart: .value("Phase start", start),
+                    xEnd: .value("Phase end", max(start, end)),
+                    y: .value("Exercise target", target(for: phase))
+                )
+                .foregroundStyle(color(phase))
+                .lineStyle(StrokeStyle(lineWidth: 5, lineCap: .round))
+            }
+        }
+    }
+
+    private func target(for phase: ExercisePhaseStored) -> Decimal {
+        let mgdL: Decimal
+        if let snapshot = phase.configurationSnapshot,
+           let configuration = try? JSONDecoder().decode(ExercisePhaseConfiguration.self, from: snapshot)
+        {
+            mgdL = configuration.targetGlucose
+        } else {
+            mgdL = phase.targetGlucose?.decimalValue ?? 100
+        }
+        return units == .mmolL ? mgdL.asMmolL : mgdL
+    }
+
+    private func color(_ phase: ExercisePhaseStored) -> Color {
+        switch phase.kind.flatMap(ExercisePhase.init(rawValue:)) {
+        case .preExercise: ExerciseModeUI.preColor
+        case .exercise: ExerciseModeUI.exerciseColor
+        case .postExercise: ExerciseModeUI.postColor
+        case nil: .clear
+        }
     }
 }
 
